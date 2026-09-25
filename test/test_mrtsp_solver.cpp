@@ -23,11 +23,11 @@ limitations under the License.
 #include <limits>
 #include <vector>
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
-#include "frontier_exploration_ros2/mrtsp_ordering.hpp"
-#include "frontier_exploration_ros2/mrtsp_solver.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
+#include "nova_exploration/mrtsp_ordering.hpp"
+#include "nova_exploration/mrtsp_solver.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
@@ -304,4 +304,4 @@ TEST(MrtspSolverTests, GreedyModePreservesFullCandidateOrderingAndBypassesCacheR
 }
 
 }  // namespace
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

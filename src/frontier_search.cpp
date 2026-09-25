@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_search.hpp"
+#include "nova_exploration/frontier_search.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +22,7 @@ limitations under the License.
 #include <cstdint>
 #include <limits>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -915,4 +915,4 @@ std::optional<VisibleRevealGain> compute_visible_reveal_gain(
   };
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

@@ -22,9 +22,9 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "frontier_exploration_ros2/srv/control_exploration.hpp"
+#include "nova_exploration/srv/control_exploration.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 struct ParsedControlCommand
@@ -146,4 +146,4 @@ inline std::string control_state_to_string(uint8_t state)
   }
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

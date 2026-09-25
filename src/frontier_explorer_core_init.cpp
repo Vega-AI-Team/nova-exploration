@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
-#include "frontier_exploration_ros2/mrtsp_solver.hpp"
+#include "nova_exploration/mrtsp_solver.hpp"
 
 #include "frontier_explorer_core_detail.hpp"
 
@@ -24,7 +24,7 @@ limitations under the License.
 #include <cctype>
 #include <utility>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 FrontierExplorerCore::FrontierExplorerCore(
@@ -215,4 +215,4 @@ FrontierSequence FrontierExplorerCore::to_frontier_sequence(
   return sequence;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/mrtsp_ordering.hpp"
+#include "nova_exploration/mrtsp_ordering.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -243,4 +243,4 @@ std::vector<std::size_t> greedy_mrtsp_order(const MrtspCostMatrix & cost_matrix)
   return ordered_frontiers;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

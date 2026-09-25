@@ -34,11 +34,11 @@ limitations under the License.
 #include <tf2_ros/transform_listener.h>
 #include <visualization_msgs/msg/marker_array.hpp>
 
-#include "frontier_exploration_ros2/debug/debug_analyzer.hpp"
-#include "frontier_exploration_ros2/debug/debug_markers.hpp"
-#include "frontier_exploration_ros2/qos_utils.hpp"
+#include "nova_exploration/debug/debug_analyzer.hpp"
+#include "nova_exploration/debug/debug_markers.hpp"
+#include "nova_exploration/qos_utils.hpp"
 
-namespace frontier_exploration_ros2::debug
+namespace nova_exploration::debug
 {
 
 namespace
@@ -438,12 +438,12 @@ private:
   std::unordered_map<std::string, std::optional<int64_t>> warning_times_;
 };
 
-}  // namespace frontier_exploration_ros2::debug
+}  // namespace nova_exploration::debug
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<frontier_exploration_ros2::debug::FrontierDebugObserverNode>());
+  rclcpp::spin(std::make_shared<nova_exploration::debug::FrontierDebugObserverNode>());
   rclcpp::shutdown();
   return 0;
 }

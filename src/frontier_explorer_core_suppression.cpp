@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 bool FrontierExplorerCore::suppression_enabled() const
@@ -235,4 +235,4 @@ void FrontierExplorerCore::consider_cancel_suppressed_return_to_start()
   dispatch_pending_frontier_goal(*current_pose);
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

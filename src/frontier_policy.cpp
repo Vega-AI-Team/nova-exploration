@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_policy.hpp"
+#include "nova_exploration/frontier_policy.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 std::pair<double, double> frontier_position(const FrontierLike & frontier)
@@ -131,4 +131,4 @@ bool are_frontier_sequences_equivalent(
   return true;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

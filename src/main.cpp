@@ -19,13 +19,13 @@ limitations under the License.
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "frontier_exploration_ros2/frontier_explorer_node.hpp"
+#include "nova_exploration/frontier_explorer_node.hpp"
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
-  auto node = std::make_shared<frontier_exploration_ros2::FrontierExplorerNode>();
+  auto node = std::make_shared<nova_exploration::FrontierExplorerNode>();
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(node);
   while (rclcpp::ok() && !node->quitRequested()) {

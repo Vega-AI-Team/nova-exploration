@@ -26,9 +26,9 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
@@ -1517,4 +1517,4 @@ TEST(PreemptionFlowTests, GoalSucceededRedispatchesImmediatelyWhenPostGoalSettle
 }
 
 }  // namespace
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

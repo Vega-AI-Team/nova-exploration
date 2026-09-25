@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(frontier_exploration_ros2)
+project(nova_exploration)
 
 if(POLICY CMP0069)
   cmake_policy(SET CMP0069 NEW)
@@ -7,6 +7,12 @@ endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
+# GCC on aarch64 notes that std::pair argument passing changed in GCC 10.1.
+# Everything here is built with the same compiler, so the ABI note is noise.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options(-Wno-psabi)
 endif()
 
 find_package(ament_cmake REQUIRED)

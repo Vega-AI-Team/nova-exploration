@@ -60,7 +60,7 @@ def _create_debug_actions(context):
 
     return [
         Node(
-            package="frontier_exploration_ros2",
+            package="nova_exploration",
             executable="frontier_debug_observer",
             name="frontier_debug_observer",
             namespace=namespace,
@@ -73,7 +73,7 @@ def _create_debug_actions(context):
 
 def generate_launch_description():
     default_params = Path(
-        get_package_share_directory("frontier_exploration_ros2")
+        get_package_share_directory("nova_exploration")
     ) / "config" / "params.yaml"
 
     # The debug observer runs as a standalone node. It can be launched next to an

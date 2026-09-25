@@ -14,11 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
 #include "frontier_explorer_core_detail.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
@@ -267,4 +267,4 @@ void FrontierExplorerCore::localCostmapCallback(const OccupancyGrid2d & map_msg)
   }
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

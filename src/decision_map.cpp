@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/decision_map.hpp"
+#include "nova_exploration/decision_map.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +23,7 @@ limitations under the License.
 #include <type_traits>
 #include <utility>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -1658,4 +1658,4 @@ DecisionMapResult build_decision_map(
   return result;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

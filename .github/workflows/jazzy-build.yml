@@ -38,7 +38,7 @@ jobs:
         run: |
           rosdep update
           rosdep install \
-            --from-paths . plugin/frontier_exploration_ros2_rviz \
+            --from-paths . plugin/nova_exploration_rviz \
             --ignore-src \
             --rosdistro "$ROS_DISTRO" \
             -r \
@@ -51,7 +51,7 @@ jobs:
             --event-handlers console_direct+ \
             --build-base build-core \
             --install-base install \
-            --packages-select frontier_exploration_ros2
+            --packages-select nova_exploration
 
       - name: Build RViz plugin package
         run: |
@@ -59,8 +59,8 @@ jobs:
           source install/setup.bash
           colcon build \
             --event-handlers console_direct+ \
-            --base-paths . plugin/frontier_exploration_ros2_rviz \
+            --base-paths . plugin/nova_exploration_rviz \
             --build-base build-all \
             --install-base install \
-            --packages-select frontier_exploration_ros2_rviz \
+            --packages-select nova_exploration_rviz \
             --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3

@@ -54,7 +54,7 @@ def _create_frontier_actions(context):
         frontier_overrides["control_service_enabled"] = control_service_enabled_override
 
     frontier_node = Node(
-        package="frontier_exploration_ros2",
+        package="nova_exploration",
         executable="frontier_explorer",
         name="frontier_explorer",
         namespace=namespace,
@@ -70,7 +70,7 @@ def _create_frontier_actions(context):
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory("frontier_exploration_ros2")
+    pkg_share = get_package_share_directory("nova_exploration")
     default_params = (Path(pkg_share) / "config" / "params.yaml")
 
     return LaunchDescription(

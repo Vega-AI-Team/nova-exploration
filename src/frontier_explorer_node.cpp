@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_node.hpp"
-#include "frontier_exploration_ros2/nav2_compat.hpp"
+#include "nova_exploration/frontier_explorer_node.hpp"
+#include "nova_exploration/nav2_compat.hpp"
 
 #include <action_msgs/msg/goal_status.hpp>
 #include <action_msgs/srv/cancel_goal.hpp>
@@ -39,7 +39,7 @@ limitations under the License.
 
 #include <visualization_msgs/msg/marker.hpp>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -431,7 +431,7 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
       this->get_logger(),
       "Explorer is in cold idle. Send a start request via the '%s' service or use "
       "'frontier_exploration_ctl start' or "
-      "'ros2 run frontier_exploration_ros2 frontier_exploration_ctl start'.",
+      "'ros2 run nova_exploration frontier_exploration_ctl start'.",
       control_service_->get_service_name());
   }
   if (params_.frontier_suppression_enabled) {
@@ -1479,4 +1479,4 @@ int FrontierExplorerNode::mapResultCodeToGoalStatus(rclcpp_action::ResultCode co
   }
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

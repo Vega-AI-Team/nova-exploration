@@ -27,12 +27,12 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "frontier_exploration_ros2/decision_map.hpp"
-#include "frontier_exploration_ros2/frontier_policy.hpp"
-#include "frontier_exploration_ros2/frontier_search.hpp"
-#include "frontier_exploration_ros2/mrtsp_ordering.hpp"
+#include "nova_exploration/decision_map.hpp"
+#include "nova_exploration/frontier_policy.hpp"
+#include "nova_exploration/frontier_search.hpp"
+#include "nova_exploration/mrtsp_ordering.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
@@ -1308,4 +1308,4 @@ TEST(MrtspOrderingTests, StartCostFallsBackToEuclideanWithoutApproxRobotCenterDi
 }
 
 }  // namespace
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

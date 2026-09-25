@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
 #include "frontier_explorer_core_detail.hpp"
 
@@ -26,7 +26,7 @@ limitations under the License.
 #include <sstream>
 #include <stdexcept>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 void FrontierExplorerCore::try_send_next_goal()
@@ -1284,4 +1284,4 @@ void FrontierExplorerCore::set_priority_point(
   dispatch_pending_frontier_goal(*current_pose);
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

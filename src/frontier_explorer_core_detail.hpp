@@ -26,9 +26,9 @@ limitations under the License.
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <action_msgs/msg/goal_status.hpp>
 
-#include "frontier_exploration_ros2/frontier_types.hpp"
+#include "nova_exploration/frontier_types.hpp"
 
-namespace frontier_exploration_ros2::detail
+namespace nova_exploration::detail
 {
 
 // Shared angle constant for the visible-gain sensor model and degree/radian conversions.
@@ -115,4 +115,4 @@ inline int quantize_bucket(double value, double quantum)
   return static_cast<int>(std::llround(value / safe_quantum));
 }
 
-}  // namespace frontier_exploration_ros2::detail
+}  // namespace nova_exploration::detail

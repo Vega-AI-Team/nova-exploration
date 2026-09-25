@@ -38,7 +38,7 @@ jobs:
         run: |
           rosdep update
           rosdep install \
-            --from-paths . plugin/frontier_exploration_ros2_rviz \
+            --from-paths . plugin/nova_exploration_rviz \
             --ignore-src \
             --rosdistro "$ROS_DISTRO" \
             -r \
@@ -52,16 +52,16 @@ jobs:
             --build-base build-core \
             --install-base install \
             --test-result-base test-results \
-            --packages-select frontier_exploration_ros2
+            --packages-select nova_exploration
 
           source install/setup.bash
           colcon build \
             --event-handlers console_direct+ \
-            --base-paths . plugin/frontier_exploration_ros2_rviz \
+            --base-paths . plugin/nova_exploration_rviz \
             --build-base build-all \
             --install-base install \
             --test-result-base test-results \
-            --packages-select frontier_exploration_ros2_rviz \
+            --packages-select nova_exploration_rviz \
             --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3
 
       - name: Run tests
@@ -79,16 +79,16 @@ jobs:
             --build-base build-core \
             --install-base install \
             --test-result-base test-results \
-            --packages-select frontier_exploration_ros2 || core_status=$?
+            --packages-select nova_exploration || core_status=$?
 
           colcon test \
             --event-handlers console_direct+ \
             --return-code-on-test-failure \
-            --base-paths . plugin/frontier_exploration_ros2_rviz \
+            --base-paths . plugin/nova_exploration_rviz \
             --build-base build-all \
             --install-base install \
             --test-result-base test-results \
-            --packages-select frontier_exploration_ros2_rviz || rviz_status=$?
+            --packages-select nova_exploration_rviz || rviz_status=$?
 
           colcon test-result \
             --test-result-base test-results \

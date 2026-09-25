@@ -1,0 +1,10 @@
+<library path="nova_exploration_rviz">
+  <class
+    name="nova_exploration_rviz/ExplorationControlPanel"
+    type="nova_exploration_rviz::ExplorationControlPanel"
+    base_class_type="rviz_common::Panel">
+    <description>
+      Optional RViz panel for nova_exploration start/stop control and status observation.
+    </description>
+  </class>
+</library>

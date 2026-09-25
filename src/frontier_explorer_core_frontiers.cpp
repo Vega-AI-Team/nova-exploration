@@ -14,10 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
 #include "frontier_explorer_core_detail.hpp"
-#include "frontier_exploration_ros2/mrtsp_solver.hpp"
+#include "nova_exploration/mrtsp_solver.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -25,7 +25,7 @@ limitations under the License.
 #include <sstream>
 #include <stdexcept>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 FrontierSequence FrontierExplorerCore::build_mrtsp_frontier_sequence(
@@ -180,27 +180,27 @@ FrontierSequence FrontierExplorerCore::build_mrtsp_frontier_sequence(
 
 std::pair<double, double> FrontierExplorerCore::frontier_position(const FrontierLike & frontier) const
 {
-  return frontier_exploration_ros2::frontier_position(frontier);
+  return nova_exploration::frontier_position(frontier);
 }
 
 std::pair<double, double> FrontierExplorerCore::frontier_reference_point(const FrontierLike & frontier) const
 {
-  return frontier_exploration_ros2::frontier_reference_point(frontier);
+  return nova_exploration::frontier_reference_point(frontier);
 }
 
 int FrontierExplorerCore::frontier_size(const FrontierLike & frontier) const
 {
-  return frontier_exploration_ros2::frontier_size(frontier);
+  return nova_exploration::frontier_size(frontier);
 }
 
 std::string FrontierExplorerCore::describe_frontier(const FrontierLike & frontier) const
 {
-  return frontier_exploration_ros2::describe_frontier(frontier);
+  return nova_exploration::describe_frontier(frontier);
 }
 
 FrontierSignature FrontierExplorerCore::frontier_signature(const FrontierSequence & frontiers) const
 {
-  return frontier_exploration_ros2::frontier_signature(frontiers, params.frontier_visit_tolerance);
+  return nova_exploration::frontier_signature(frontiers, params.frontier_visit_tolerance);
 }
 
 bool FrontierExplorerCore::frontier_snapshot_matches(
@@ -427,7 +427,7 @@ bool FrontierExplorerCore::are_frontiers_equivalent(
   const std::optional<FrontierLike> & first_frontier,
   const std::optional<FrontierLike> & second_frontier) const
 {
-  return frontier_exploration_ros2::are_frontiers_equivalent(
+  return nova_exploration::are_frontiers_equivalent(
     first_frontier,
     second_frontier,
     params.frontier_visit_tolerance);
@@ -683,10 +683,10 @@ bool FrontierExplorerCore::are_frontier_sequences_equivalent(
   const FrontierSequence & first_frontier_sequence,
   const FrontierSequence & second_frontier_sequence) const
 {
-  return frontier_exploration_ros2::are_frontier_sequences_equivalent(
+  return nova_exploration::are_frontier_sequences_equivalent(
     first_frontier_sequence,
     second_frontier_sequence,
     params.frontier_visit_tolerance);
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

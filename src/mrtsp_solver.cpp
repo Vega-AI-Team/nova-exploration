@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/mrtsp_solver.hpp"
+#include "nova_exploration/mrtsp_solver.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -23,7 +23,7 @@ limitations under the License.
 #include <map>
 #include <vector>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -267,4 +267,4 @@ std::vector<std::size_t> solve_bounded_horizon_mrtsp_order(
   return reversed_order;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

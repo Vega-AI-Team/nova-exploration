@@ -14,13 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/frontier_suppression.hpp"
+#include "nova_exploration/frontier_suppression.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 
 namespace
@@ -440,4 +440,4 @@ bool FrontierSuppression::progress_timeout_cancel_requested() const noexcept
          state_.active_goal_progress->cancel_requested_by_timeout;
 }
 
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

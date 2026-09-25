@@ -18,10 +18,10 @@ limitations under the License.
 
 #include <stdexcept>
 
-#include "frontier_exploration_ros2/qos_utils.hpp"
-#include "frontier_exploration_ros2/frontier_explorer_core.hpp"
+#include "nova_exploration/qos_utils.hpp"
+#include "nova_exploration/frontier_explorer_core.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
@@ -131,4 +131,4 @@ TEST(QosUtilsTests, StartupAutodetectStopsWhenMapArrives)
 }
 
 }  // namespace
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

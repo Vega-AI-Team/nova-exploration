@@ -26,16 +26,16 @@ limitations under the License.
 #include <thread>
 #include <vector>
 
-#include "frontier_exploration_ros2/frontier_explorer_node.hpp"
-#include "frontier_exploration_ros2/srv/control_exploration.hpp"
+#include "nova_exploration/frontier_explorer_node.hpp"
+#include "nova_exploration/srv/control_exploration.hpp"
 #include "frontier_exploration_ctl_detail.hpp"
 
-namespace frontier_exploration_ros2
+namespace nova_exploration
 {
 namespace
 {
 
-using ControlExploration = frontier_exploration_ros2::srv::ControlExploration;
+using ControlExploration = nova_exploration::srv::ControlExploration;
 
 geometry_msgs::msg::Pose make_pose(double x = 0.0, double y = 0.0)
 {
@@ -418,4 +418,4 @@ TEST_F(FrontierControlNodeTests, StopWithQuitRequestsOnlyExplorerExit)
 }
 
 }  // namespace
-}  // namespace frontier_exploration_ros2
+}  // namespace nova_exploration

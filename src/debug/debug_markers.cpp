@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/debug/debug_markers.hpp"
+#include "nova_exploration/debug/debug_markers.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +29,7 @@ limitations under the License.
 #include <std_msgs/msg/color_rgba.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 
-namespace frontier_exploration_ros2::debug
+namespace nova_exploration::debug
 {
 
 namespace
@@ -689,4 +689,4 @@ visualization_msgs::msg::MarkerArray make_decision_map_chunk_cache_markers(
   return markers;
 }
 
-}  // namespace frontier_exploration_ros2::debug
+}  // namespace nova_exploration::debug

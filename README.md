@@ -1,4 +1,4 @@
-# frontier_exploration_ros2
+# nova_exploration
 
 [![Contributors](https://img.shields.io/github/contributors/mertgulerx/frontier-exploration-ros2?style=for-the-badge)](https://github.com/mertgulerx/frontier-exploration-ros2/graphs/contributors)
 [![Stars](https://img.shields.io/github/stars/mertgulerx/frontier-exploration-ros2?style=for-the-badge)](https://github.com/mertgulerx/frontier-exploration-ros2/stargazers)
@@ -34,7 +34,7 @@
   </tr>
 </table>
 
-`frontier_exploration_ros2` is a powerful open-source autonomous exploration package built for modern mobile robots. It is fast, reliable, and designed to make autonomous exploration feel practical, polished, and ready for real-world use.
+`nova_exploration` is a powerful open-source autonomous exploration package built for modern mobile robots. It is fast, reliable, and designed to make autonomous exploration feel practical, polished, and ready for real-world use.
 
 Built and validated with ROS 2 Jazzy & Humble, it is still written with flexibility in mind. It fits naturally into Nav2-based projects, custom ROS 2 systems, and broader robotics workflows without making the exploration logic feel locked to a narrow setup.
 
@@ -129,7 +129,7 @@ The **bounded-horizon Dynamic Programming** solver uses techniques I learned in 
 
 This **improves ordering quality significantly** without turning frontier selection into a heavy full-route solver. The robot still dispatches only the **first frontier** from the selected sequence, then replans after **map and frontier updates**.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Status
 
@@ -139,7 +139,7 @@ Even though the public deliverable is a ROS 2 package, the implementation is int
 
 In practice, that makes the package easier to reuse in Nav2 deployments, custom ROS 2 stacks, and later adaptations where the core exploration behavior needs to move into a different system layout.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Version History
 
@@ -154,7 +154,7 @@ In practice, that makes the package easier to reuse in Nav2 deployments, custom 
 | `v1.6.0` | Added accurate distance calculation, grid based caching for map optimization, better distance and direction scoring for MRTSP, map processing refresh rate, better guarding for Nav2 failures. <br> Optimized preemption CPU usage. <br> Improved stability of the exploration and general performance. <br> Deprecated `nearest` mode |
 | `v1.6.1` | Added ROS 2 Humble support. Improved launch parameter compatibility and debug marker handling.                                                                                                                                                                                                                                         |
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Verified Environment
 
@@ -180,7 +180,7 @@ The TurtleBot3 Waffle Pi is also a relatively small and slow robot, so parameter
 > [!TIP]
 > This demo uses `MRTSP Scoring + Map Optimization + Early Preemption` to achieve highly efficient, smart autonomous exploration with smoother and more purposeful navigation decisions.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Design Goals
 
@@ -193,7 +193,7 @@ The TurtleBot3 Waffle Pi is also a relatively small and slow robot, so parameter
 - Make namespace-aware deployment and multi-robot integration practical.
 - Keep the package public and universal. The package should be usable without assuming a specific robot, simulator, map saver, or private stack.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Flowchart Diagram
 
@@ -312,10 +312,10 @@ rosdep install --from-paths src --ignore-src -r -y
 ```bash
 cd <your_workspace>
 source /opt/ros/<your_ros2_distro>/setup.bash
-colcon build --packages-select frontier_exploration_ros2
+colcon build --packages-select nova_exploration
 ```
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Quick Start
 
@@ -335,7 +335,7 @@ To use the higher performance but **lower accuracy** greedy method, set `mrtsp_s
 Launch with the packaged parameter file:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py
+ros2 launch nova_exploration frontier_explorer.launch.py
 ```
 
 The packaged launch file uses the packaged `config/params.yaml` defaults, and that baseline starts exploration immediately with `autostart:=true`.
@@ -343,35 +343,35 @@ The packaged launch file uses the packaged `config/params.yaml` defaults, and th
 Override the parameter file:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   params_file:=/absolute/path/to/params.yaml
 ```
 
 Run under a namespace:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   namespace:=robot1
 ```
 
 Enable simulation time:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   use_sim_time:=true
 ```
 
 Override startup map durability:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   map_qos_durability:=volatile
 ```
 
 Enable startup-only map QoS autodetect:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   map_qos_autodetect_on_startup:=true \
   map_qos_autodetect_timeout_s:=2.0
 ```
@@ -379,21 +379,21 @@ ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
 Keep the node in cold idle at launch time:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   autostart:=false
 ```
 
 Disable the runtime control service while keeping automatic startup:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   autostart:=true \
   control_service_enabled:=false
 ```
 
 ### Runtime Control
 
-When `control_service_enabled=true`, the node exposes a `control_exploration` service using `frontier_exploration_ros2/srv/ControlExploration`. This service provides an explicit runtime control surface for exploration lifecycle management. It is available even when exploration starts automatically, and is mainly useful for stop, delayed start/stop, cold-idle orchestration, and optional self-shutdown flows. If `autostart=false`, the node keeps this service enabled regardless of the configured `control_service_enabled` value so the cold-idle session can still be started.
+When `control_service_enabled=true`, the node exposes a `control_exploration` service using `nova_exploration/srv/ControlExploration`. This service provides an explicit runtime control surface for exploration lifecycle management. It is available even when exploration starts automatically, and is mainly useful for stop, delayed start/stop, cold-idle orchestration, and optional self-shutdown flows. If `autostart=false`, the node keeps this service enabled regardless of the configured `control_service_enabled` value so the cold-idle session can still be started.
 
 The packaged CLI helper provides a convenient terminal interface for that service:
 
@@ -417,17 +417,17 @@ If the control service is disabled while `autostart=true`, the CLI helper and RV
 
 When the package is started with its own example launch file, `stop -q` also causes that launch session to exit after the explorer process stops. It does not attempt to terminate unrelated nodes, external launch parents, or arbitrary terminal sessions. Higher-level process orchestration remains outside the scope of this package.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Rviz Plugin
 
-`frontier_exploration_ros2` also provides an optional RViz plugin for start and stop exploration control directly from RViz.
+`nova_exploration` also provides an optional RViz plugin for start and stop exploration control directly from RViz.
 
-<img src="https://raw.githubusercontent.com/mertgulerx/readme-assets/main/frontier-exploration/frontier-exploration-ros2-rviz.png" alt="RViz plugin for frontier_exploration_ros2" width="50%" />
+<img src="https://raw.githubusercontent.com/mertgulerx/readme-assets/main/frontier-exploration/frontier-exploration-ros2-rviz.png" alt="RViz plugin for nova_exploration" width="50%" />
 
-For details, inspect plugin's own [README.md](plugin/frontier_exploration_ros2_rviz/README.md).
+For details, inspect plugin's own [README.md](plugin/nova_exploration_rviz/README.md).
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Greedy MRTSP vs Dynamic Programming
 
@@ -455,7 +455,7 @@ For MRTSP ordering, **Dynamic Programming** is a game-changing feature. It great
 | Greedy MRTSP        | 273.52                | 08:19                | 499              |
 | m_explore_ros2      | 338.61                | 09:47                | 587              |
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Benchmark
 
@@ -473,8 +473,8 @@ Detailed results are available in the [benchmark repository](https://github.com/
 
 | Package                                    | Single Core CPU Usage (%) | RAM Usage (MB) | Distance Traveled (m) | Time Elapsed (mm:ss) | Time Elapsed (s) |
 | ------------------------------------------ | ------------------------- | -------------- | --------------------- | -------------------- | ---------------- |
-| `frontier_exploration_ros2 (greedy mrtsp)` | 7.4                       | 56.5           | 36.60                 | 01:03                | 63               |
-| `frontier_exploration_ros2 (nearest)`      | 4.0                       | 56.6           | 37.72                 | 01:13                | 73               |
+| `nova_exploration (greedy mrtsp)` | 7.4                       | 56.5           | 36.60                 | 01:03                | 63               |
+| `nova_exploration (nearest)`      | 4.0                       | 56.6           | 37.72                 | 01:13                | 73               |
 | `m_explore_ros2`                           | 2.4                       | 51.9           | 50.73                 | 01:36                | 96               |
 | `nav2_wavefront_frontier_exploration`      | 10.3                      | 100.7          | 52.85                 | 02:49                | 169              |
 | `roadmap-explorer`                         | 32.8                      | 111.8          | 39.28                 | 01:12                | 72               |
@@ -489,8 +489,8 @@ Detailed results are available in the [benchmark repository](https://github.com/
     </td>
   </tr>
   <tr>
-    <td align="center"><small>frontier_exploration_ros2 (Greedy MRTSP)</small></td>
-    <td align="center"><small>frontier_exploration_ros2 (nearest)</small></td>
+    <td align="center"><small>nova_exploration (Greedy MRTSP)</small></td>
+    <td align="center"><small>nova_exploration (nearest)</small></td>
   </tr>
 </table>
 
@@ -546,8 +546,8 @@ Detailed results are available in the [benchmark repository](https://github.com/
 
 | Package                                    | Single Core CPU Usage (%) | RAM Usage (MB) | Distance Traveled (m) | Time Elapsed (mm:ss) | Time Elapsed (s) |
 | ------------------------------------------ | ------------------------- | -------------- | --------------------- | -------------------- | ---------------- |
-| `frontier_exploration_ros2 (greedy mrtsp)` | 17.6                      | 85.2           | 273.52                | 08:19                | 499              |
-| `frontier_exploration_ros2 (nearest)`      | 7.7                       | 85.0           | 283.74                | 08:44                | 524              |
+| `nova_exploration (greedy mrtsp)` | 17.6                      | 85.2           | 273.52                | 08:19                | 499              |
+| `nova_exploration (nearest)`      | 7.7                       | 85.0           | 283.74                | 08:44                | 524              |
 | `m_explore_ros2`                           | 4.4                       | 54.0           | 338.61                | 09:47                | 587              |
 | `roadmap-explorer`                         | 47.8                      | 142.4          | 286.28                | 10:41                | 641              |
 
@@ -561,8 +561,8 @@ Detailed results are available in the [benchmark repository](https://github.com/
     </td>
   </tr>
   <tr>
-    <td align="center"><small>frontier_exploration_ros2 (Greedy MRTSP)</small></td>
-    <td align="center"><small>frontier_exploration_ros2 (nearest)</small></td>
+    <td align="center"><small>nova_exploration (Greedy MRTSP)</small></td>
+    <td align="center"><small>nova_exploration (nearest)</small></td>
   </tr>
 </table>
 
@@ -597,7 +597,7 @@ Detailed results are available in the [benchmark repository](https://github.com/
   </tr>
 </table>
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Nearest vs Greedy MRTSP Results
 
@@ -689,14 +689,14 @@ This is especially effective in corridor-like maps, where narrow leftover fragme
   </tr>
 </table>
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Architecture
 
 The package includes these main pieces:
 
 - `frontier_explorer`: public executable that subscribes to map and costmap topics, queries TF, and talks to Nav2 `NavigateToPose`.
-- `frontier_exploration_ros2::frontier_exploration_ros2_core`: reusable C++ core library that contains frontier search, decision-map construction, MRTSP ordering, goal-state handling, settle logic, active-goal preemption, blocked-goal handling, and suppression orchestration.
+- `nova_exploration::nova_exploration_core`: reusable C++ core library that contains frontier search, decision-map construction, MRTSP ordering, goal-state handling, settle logic, active-goal preemption, blocked-goal handling, and suppression orchestration.
 - `frontier_debug_observer`: passive RViz debug executable that observes map, costmap, TF, and parameters, then publishes analysis overlays without sending goals or changing exploration behavior.
 - `control_exploration`: optional typed ROS service used to start, stop, schedule, and optionally shut down the explorer process.
 - `frontier_exploration_ctl`: packaged CLI helper for sending exploration control requests from the terminal.
@@ -737,7 +737,7 @@ These debug outputs are published only when debug logging is enabled for the nod
 
 When suppression is enabled, the core can temporarily exclude repeatedly failing frontier areas and optionally wait under a temporary return-to-start goal while all detected frontiers remain suppressed. That temporary return path is separate from normal exploration completion.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Debug Observer
 
@@ -748,13 +748,13 @@ The package includes a debug observer for RViz. It shows what frontier selection
 Run the observer next to an explorer instance:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_debug.launch.py
+ros2 launch nova_exploration frontier_debug.launch.py
 ```
 
 Use the same parameter file as the explorer when tuning a real run:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_debug.launch.py \
+ros2 launch nova_exploration frontier_debug.launch.py \
   params_file:=/path/to/params.yaml
 ```
 
@@ -947,7 +947,7 @@ Displayed values:
 - smoothed and dilated structure produced by decision-map optimization
 - candidate changes that explain differences between raw and optimized frontier overlays
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Algorithm and Mathematics
 
@@ -1434,7 +1434,7 @@ When all current candidates are suppressed, `all_frontiers_suppressed_behavior` 
 
 This temporary return behavior is separate from `return_to_start_on_complete`. It does not mark exploration complete, and it is canceled automatically if usable frontier candidates appear again.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Integration Guide
 
@@ -1494,7 +1494,7 @@ The launch file accepts a `namespace` argument and all packaged topic defaults a
 Example:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   namespace:=robot1 \
   params_file:=/absolute/path/to/robot1_frontier.yaml
 ```
@@ -1529,11 +1529,11 @@ Suppressed return-to-start is different. If `all_frontiers_suppressed_behavior=r
 The package exports a reusable C++ target:
 
 ```cmake
-find_package(frontier_exploration_ros2 REQUIRED)
+find_package(nova_exploration REQUIRED)
 
 add_executable(my_explorer src/my_explorer.cpp)
 target_link_libraries(my_explorer
-  frontier_exploration_ros2::frontier_exploration_ros2_core
+  nova_exploration::nova_exploration_core
 )
 ```
 
@@ -1556,7 +1556,7 @@ In those cases, suppression adds three controls:
 
 If the frontier set changes and a usable candidate appears again, the temporary return-to-start goal is canceled and frontier exploration resumes automatically.
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## QoS Configuration
 
@@ -1628,7 +1628,7 @@ Suppression does not define its own QoS policy, but it is still relevant during 
 2. use startup grace while validating navigation bring-up timing
 3. then tune suppression thresholds only after the transport layer is stable
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Launch File Reference
 
@@ -1654,7 +1654,7 @@ Notes:
 - all other node behavior is defined by the selected parameter file
 - MRTSP solver selection, decision-map tuning, suppression behavior, startup grace, and suppressed-frontier waiting policy are configured in YAML, not through dedicated launch arguments
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Parameter Reference
 
@@ -1762,7 +1762,7 @@ The packaged launch path uses `config/params.yaml` as its baseline parameter fil
 | `completion_event_enabled` | `bool`   | `false`                | Enables completion-event publishing | Publishes once per node lifetime after frontier exhaustion; packaged configs override this to `true` |
 | `completion_event_topic`   | `string` | `exploration_complete` | Topic used for the completion event | Must be non-empty if completion events are enabled                                                   |
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## TurtleBot3 Waffle Pi Example
 
@@ -2035,7 +2035,7 @@ frontier_explorer:
 Assuming TurtleBot3, SLAM, and Nav2 are already running:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   params_file:=/absolute/path/to/tb3_waffle_pi_frontier.yaml \
   use_sim_time:=true
 ```
@@ -2043,7 +2043,7 @@ ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
 For a namespaced robot:
 
 ```bash
-ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
+ros2 launch nova_exploration frontier_explorer.launch.py \
   namespace:=tb3 \
   params_file:=/absolute/path/to/tb3_waffle_pi_frontier.yaml \
   use_sim_time:=true
@@ -2061,7 +2061,7 @@ ros2 launch frontier_exploration_ros2 frontier_explorer.launch.py \
 - if you use debug inspection, the selected frontier and optimized map topics are visible while debug logging is enabled
 - the completion event topic is subscribed by an external consumer if post-processing is needed
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Testing
 
@@ -2070,7 +2070,7 @@ Run package tests with:
 ```bash
 cd <your_workspace>
 source /opt/ros/<your_ros2_distro/setup.bash
-colcon test --packages-select frontier_exploration_ros2
+colcon test --packages-select nova_exploration
 colcon test-result --verbose
 ```
 
@@ -2096,7 +2096,7 @@ Current test coverage includes:
 - MRTSP candidate distance filtering
 - dispatch-point behavior and goal-point fallback semantics
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Contributing
 
@@ -2151,8 +2151,8 @@ Please make sure the change:
 
 ```bash
 git checkout -b feature/my-change
-colcon build --packages-select frontier_exploration_ros2
-colcon test --packages-select frontier_exploration_ros2
+colcon build --packages-select nova_exploration
+colcon test --packages-select nova_exploration
 ```
 
 Then open a pull request with:
@@ -2172,17 +2172,17 @@ Then open a pull request with:
 - [ ] no project-specific references were introduced
 - [ ] QoS and integration behavior are clearly documented
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## License
 
 This project is released under the Apache-2.0 License. See [LICENSE](https://github.com/mertgulerx/frontier-exploration-ros2/blob/main/LICENSE).
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>
 
 ## Maintainer
 
 Maintainer: `mertgulerx`  
 Support Email: `support.mertgulerx@gmail.com`
 
-<p align="right"><a href="#frontier_exploration_ros2">back to top</a></p>
+<p align="right"><a href="#nova_exploration">back to top</a></p>

@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "frontier_exploration_ros2/debug/debug_analyzer.hpp"
+#include "nova_exploration/debug/debug_analyzer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -24,11 +24,11 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
-#include "frontier_exploration_ros2/decision_map.hpp"
-#include "frontier_exploration_ros2/mrtsp_ordering.hpp"
-#include "frontier_exploration_ros2/mrtsp_solver.hpp"
+#include "nova_exploration/decision_map.hpp"
+#include "nova_exploration/mrtsp_ordering.hpp"
+#include "nova_exploration/mrtsp_solver.hpp"
 
-namespace frontier_exploration_ros2::debug
+namespace nova_exploration::debug
 {
 
 namespace
@@ -308,4 +308,4 @@ FrontierDebugSnapshot analyze_frontier_debug_snapshot(
   return snapshot;
 }
 
-}  // namespace frontier_exploration_ros2::debug
+}  // namespace nova_exploration::debug
