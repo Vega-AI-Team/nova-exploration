@@ -146,6 +146,11 @@ void FrontierExplorerCore::try_send_next_goal()
   }
 
   no_frontiers_reported = false;
+  if (priority_point.has_value() && !match_priority_frontier(filtered_frontiers).has_value()) {
+    // The prioritized frontier was explored away or suppressed.
+    priority_point.reset();
+    callbacks.log_info("Priority frontier is gone; resuming automatic ordering");
+  }
   auto selection = select_frontier(filtered_frontiers, *current_pose);
   if (escape_mode_active && selection.frontier.has_value()) {
     selection.mode = "escape";
@@ -193,6 +198,7 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
   pending_frontier_sequence.clear();
   pending_frontier_selection_mode.clear();
   pending_frontier_dispatch_context.clear();
+  priority_point.reset();
   active_goal_blocked_reason.reset();
   pending_costmap_search_input_update = false;
   pending_local_costmap_search_input_update = false;
@@ -1134,6 +1140,17 @@ void FrontierExplorerCore::get_result_callback(
     return;
   }
 
+  if (
+    goal_kind == "frontier" && priority_point.has_value() &&
+    status != action_msgs::msg::GoalStatus::STATUS_CANCELED &&
+    context.has_value() && context->frontier.has_value() &&
+    frontier_near_priority(*context->frontier))
+  {
+    // The prioritized goal ended (reached or failed); hand control back to MRTSP.
+    priority_point.reset();
+    callbacks.log_info("Priority frontier goal finished; resuming automatic ordering");
+  }
+
   cancel_request_in_progress = false;
   // Cancel reason must not leak to the next goal lifecycle.
   pending_cancel_reason.reset();
@@ -1200,6 +1217,71 @@ void FrontierExplorerCore::request_shutdown()
   // Prevent future callback-side state transitions and release current goal handle.
   shutdown_requested = true;
   goal_handle.reset();
+}
+
+void FrontierExplorerCore::set_priority_point(
+  const std::optional<std::pair<double, double>> & point)
+{
+  priority_point = point;
+  if (!point.has_value()) {
+    callbacks.log_info("Priority frontier cleared; resuming automatic ordering");
+    return;
+  }
+
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2)
+      << "Priority frontier requested at (" << point->first << ", " << point->second << ")";
+  callbacks.log_info(oss.str());
+
+  if (!exploration_enabled || !map.has_value() || !costmap.has_value()) {
+    // Kept until the next dispatch picks it up.
+    return;
+  }
+
+  if (!goal_in_progress) {
+    try_send_next_goal();
+    return;
+  }
+
+  if (active_goal_kind != "frontier" || cancel_request_in_progress) {
+    // Return-to-start and cancel paths finish first; the next dispatch honours the priority.
+    return;
+  }
+
+  const auto current_pose = callbacks.get_current_pose();
+  if (!current_pose.has_value()) {
+    return;
+  }
+
+  FrontierSnapshot snapshot;
+  try {
+    snapshot = get_frontier_snapshot(*current_pose, params.frontier_candidate_min_goal_distance_m);
+  } catch (const std::out_of_range & exc) {
+    callbacks.log_warn(std::string("Skipping priority frontier lookup: ") + exc.what());
+    return;
+  }
+
+  const FrontierSequence filtered_frontiers = filter_frontiers_for_suppression(snapshot.frontiers);
+  const auto priority_frontier = match_priority_frontier(filtered_frontiers);
+  if (!priority_frontier.has_value()) {
+    priority_point.reset();
+    callbacks.log_warn(
+      "No frontier within " + detail::format_meters(params.priority_match_radius_m) +
+      " of the requested point; keeping automatic ordering");
+    return;
+  }
+
+  if (are_frontiers_equivalent(priority_frontier, active_goal_frontier)) {
+    callbacks.log_info("Priority frontier is already the active goal");
+    return;
+  }
+
+  // Skip the replacement debounce: an operator request is deliberate.
+  pending_frontier_sequence = {*priority_frontier};
+  pending_frontier_selection_mode = "priority";
+  pending_frontier_dispatch_context = "reselected";
+  callbacks.log_info("Preempting active frontier goal for the operator priority frontier");
+  dispatch_pending_frontier_goal(*current_pose);
 }
 
 }  // namespace frontier_exploration_ros2

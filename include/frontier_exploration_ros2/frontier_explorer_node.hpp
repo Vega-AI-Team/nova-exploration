@@ -23,12 +23,14 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <std_msgs/msg/empty.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -62,6 +64,8 @@ private:
 
   std::optional<geometry_msgs::msg::Pose> getCurrentPose();
   void publishFrontierMarkers(const FrontierSequence & frontiers);
+  void publishFrontierInfo();
+  void priorityFrontierCallback(const geometry_msgs::msg::PointStamped::ConstSharedPtr msg);
   void publishSelectedFrontierPose(const geometry_msgs::msg::PoseStamped & pose);
   void publishOptimizedMap(const nav_msgs::msg::OccupancyGrid & map_msg);
   bool frontierMapOptimizationEnabled() const;
@@ -141,6 +145,13 @@ private:
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr frontier_marker_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr selected_frontier_pub_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr optimized_map_pub_;
+  // Frontier list + current target + operator priority as JSON, for UIs.
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr frontier_info_pub_;
+  rclcpp::Subscription<geometry_msgs::msg::PointStamped>::SharedPtr priority_frontier_sub_;
+  rclcpp::TimerBase::SharedPtr frontier_info_timer_;
+  FrontierSequence last_published_frontiers_;
+  std::string priority_frontier_topic_;
+  std::string frontier_info_topic_;
 
   // Subscriptions and timers.
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;

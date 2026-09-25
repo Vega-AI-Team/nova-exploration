@@ -390,6 +390,12 @@ FrontierSelectionResult FrontierExplorerCore::select_frontier(
   const FrontierSequence & frontiers,
   const geometry_msgs::msg::Pose & current_pose) const
 {
+  if (priority_point.has_value()) {
+    // Operator override outranks the MRTSP order for as long as it matches a frontier.
+    if (auto priority_frontier = match_priority_frontier(frontiers)) {
+      return {std::move(priority_frontier), "priority"};
+    }
+  }
   const FrontierSequence ordered_frontiers = build_mrtsp_frontier_sequence(frontiers, current_pose);
   if (ordered_frontiers.empty()) {
     return {std::nullopt, ""};
@@ -627,8 +633,50 @@ FrontierSequence FrontierExplorerCore::select_frontier_sequence(
   const geometry_msgs::msg::Pose & current_pose,
   const std::optional<FrontierLike> & initial_frontier) const
 {
-  (void)initial_frontier;
+  if (initial_frontier.has_value() && priority_point.has_value()) {
+    // A priority target is dispatched on its own; MRTSP would reorder it away.
+    const auto priority_frontier = match_priority_frontier(frontiers);
+    if (priority_frontier.has_value() && are_frontiers_equivalent(initial_frontier, priority_frontier)) {
+      return {*initial_frontier};
+    }
+  }
   return build_mrtsp_frontier_sequence(frontiers, current_pose);
+}
+
+bool FrontierExplorerCore::frontier_near_priority(const FrontierLike & frontier) const
+{
+  if (!priority_point.has_value()) {
+    return false;
+  }
+  const auto [px, py] = *priority_point;
+  const auto [gx, gy] = frontier_position(frontier);
+  const double d = std::min(
+    std::hypot(frontier.centroid.first - px, frontier.centroid.second - py),
+    std::hypot(gx - px, gy - py));
+  return d <= params.priority_match_radius_m;
+}
+
+std::optional<FrontierLike> FrontierExplorerCore::match_priority_frontier(
+  const FrontierSequence & frontiers) const
+{
+  if (!priority_point.has_value()) {
+    return std::nullopt;
+  }
+  const auto [px, py] = *priority_point;
+  std::optional<FrontierLike> best;
+  double best_distance = params.priority_match_radius_m;
+  for (const auto & frontier : frontiers) {
+    // Nearest of centroid and dispatch point: the operator may have clicked either.
+    const auto [gx, gy] = frontier_position(frontier);
+    const double d = std::min(
+      std::hypot(frontier.centroid.first - px, frontier.centroid.second - py),
+      std::hypot(gx - px, gy - py));
+    if (d <= best_distance) {
+      best_distance = d;
+      best = frontier;
+    }
+  }
+  return best;
 }
 
 bool FrontierExplorerCore::are_frontier_sequences_equivalent(

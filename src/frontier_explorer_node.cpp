@@ -30,7 +30,9 @@ limitations under the License.
 #include <chrono>
 #include <cstddef>
 #include <cmath>
+#include <iomanip>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -147,6 +149,9 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   this->declare_parameter<int>("frontier_suppression_max_regions", 64);
   this->declare_parameter<bool>("completion_event_enabled", false);
   this->declare_parameter<std::string>("completion_event_topic", "exploration_complete");
+  this->declare_parameter<std::string>("priority_frontier_topic", "explore/priority_frontier");
+  this->declare_parameter<std::string>("frontier_info_topic", "explore/frontiers_info");
+  this->declare_parameter<double>("priority_match_radius_m", 1.5);
 
   // Read navigation/exploration behavior parameters first; QoS parsing is handled separately.
   params_.map_topic = this->get_parameter("map_topic").as_string();
@@ -236,6 +241,10 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
     "frontier_suppression_max_attempt_records").as_int();
   params_.frontier_suppression_max_regions = this->get_parameter(
     "frontier_suppression_max_regions").as_int();
+  params_.priority_match_radius_m = std::max(
+    0.1, this->get_parameter("priority_match_radius_m").as_double());
+  priority_frontier_topic_ = this->get_parameter("priority_frontier_topic").as_string();
+  frontier_info_topic_ = this->get_parameter("frontier_info_topic").as_string();
   completion_event_config_.enabled = this->get_parameter("completion_event_enabled").as_bool();
   completion_event_config_.topic = this->get_parameter("completion_event_topic").as_string();
   if (completion_event_config_.enabled && completion_event_config_.topic.empty()) {
@@ -286,6 +295,15 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   optimized_map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
     params_.optimized_map_topic,
     10);
+  frontier_info_pub_ = this->create_publisher<std_msgs::msg::String>(frontier_info_topic_, 10);
+  priority_frontier_sub_ = this->create_subscription<geometry_msgs::msg::PointStamped>(
+    priority_frontier_topic_,
+    10,
+    std::bind(&FrontierExplorerNode::priorityFrontierCallback, this, std::placeholders::_1));
+  // Keeps the target/priority fields fresh between frontier refreshes.
+  frontier_info_timer_ = this->create_wall_timer(
+    std::chrono::seconds(1),
+    std::bind(&FrontierExplorerNode::publishFrontierInfo, this));
   if (control_service_enabled_) {
     control_service_ = this->create_service<srv::ControlExploration>(
       "control_exploration",
@@ -1242,6 +1260,97 @@ void FrontierExplorerNode::publishFrontierMarkers(const FrontierSequence & front
   }
 
   frontier_marker_pub_->publish(marker_array);
+  last_published_frontiers_ = frontiers;
+  publishFrontierInfo();
+}
+
+void FrontierExplorerNode::publishFrontierInfo()
+{
+  if (!frontier_info_pub_) {
+    return;
+  }
+  const bool running = runtime_state_ == RuntimeState::RUNNING && core_;
+  double resolution = 0.05;
+  if (running && core_->map.has_value() && core_->map->valid()) {
+    resolution = core_->map->map().info.resolution;
+  }
+
+  std::ostringstream json;
+  json << std::fixed << std::setprecision(3);
+  json << "{\"frame\":\"" << params_.global_frame << "\",\"frontiers\":[";
+  if (running) {
+    bool first = true;
+    for (const auto & frontier : last_published_frontiers_) {
+      const auto [gx, gy] = frontier_position(frontier);
+      json << (first ? "" : ",")
+           << "{\"x\":" << gx << ",\"y\":" << gy
+           << ",\"cx\":" << frontier.centroid.first << ",\"cy\":" << frontier.centroid.second
+           << ",\"size\":" << frontier.size
+           << ",\"size_m\":" << static_cast<double>(frontier.size) * resolution << "}";
+      first = false;
+    }
+  }
+  json << "],\"target\":";
+  if (
+    running && core_->goal_in_progress && core_->active_goal_kind == "frontier" &&
+    core_->active_goal_frontier.has_value())
+  {
+    const auto [tx, ty] = frontier_position(*core_->active_goal_frontier);
+    json << "{\"x\":" << tx << ",\"y\":" << ty << "}";
+  } else {
+    json << "null";
+  }
+  json << ",\"priority\":";
+  if (running && core_->priority_point.has_value()) {
+    json << "{\"x\":" << core_->priority_point->first
+         << ",\"y\":" << core_->priority_point->second << "}";
+  } else {
+    json << "null";
+  }
+  json << ",\"match_radius_m\":" << params_.priority_match_radius_m << "}";
+
+  std_msgs::msg::String msg;
+  msg.data = json.str();
+  frontier_info_pub_->publish(msg);
+}
+
+void FrontierExplorerNode::priorityFrontierCallback(
+  const geometry_msgs::msg::PointStamped::ConstSharedPtr msg)
+{
+  if (runtime_state_ != RuntimeState::RUNNING || !core_) {
+    RCLCPP_WARN(this->get_logger(), "Ignoring priority frontier: exploration is not running");
+    return;
+  }
+  if (!std::isfinite(msg->point.x) || !std::isfinite(msg->point.y)) {
+    // NaN is the clear request.
+    core_->set_priority_point(std::nullopt);
+    publishFrontierInfo();
+    return;
+  }
+
+  double x = msg->point.x;
+  double y = msg->point.y;
+  if (!msg->header.frame_id.empty() && msg->header.frame_id != params_.global_frame) {
+    try {
+      const auto tf = tf_buffer_->lookupTransform(
+        params_.global_frame, msg->header.frame_id, tf2::TimePointZero);
+      // Planar transform is enough for a clicked ground point.
+      const auto & q = tf.transform.rotation;
+      const double yaw = std::atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z));
+      const double c = std::cos(yaw);
+      const double sn = std::sin(yaw);
+      x = tf.transform.translation.x + c * msg->point.x - sn * msg->point.y;
+      y = tf.transform.translation.y + sn * msg->point.x + c * msg->point.y;
+    } catch (const tf2::TransformException & exc) {
+      RCLCPP_WARN(
+        this->get_logger(), "Ignoring priority frontier in frame '%s': %s",
+        msg->header.frame_id.c_str(), exc.what());
+      return;
+    }
+  }
+
+  core_->set_priority_point(std::make_pair(x, y));
+  publishFrontierInfo();
 }
 
 void FrontierExplorerNode::publishSelectedFrontierPose(const geometry_msgs::msg::PoseStamped & pose)

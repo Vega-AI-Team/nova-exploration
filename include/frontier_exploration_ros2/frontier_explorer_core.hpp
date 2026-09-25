@@ -123,6 +123,8 @@ struct FrontierExplorerCoreParams
   double frontier_suppression_startup_grace_period_s{15.0};
   int frontier_suppression_max_attempt_records{256};
   int frontier_suppression_max_regions{64};
+  // An operator priority point snaps to the nearest frontier within this radius.
+  double priority_match_radius_m{1.5};
 };
 
 // Host callbacks injected by the node wrapper (time, TF pose, action transport, logging).
@@ -454,6 +456,15 @@ public:
 
   // Shutdown guard for callbacks racing during teardown.
   bool shutdown_requested{false};
+
+  // Operator-chosen frontier (map-frame point). While set, the frontier nearest
+  // it is selected ahead of the MRTSP order. Cleared once that goal finishes or
+  // the frontier is gone, after which automatic ordering resumes.
+  std::optional<std::pair<double, double>> priority_point;
+  void set_priority_point(const std::optional<std::pair<double, double>> & point);
+  [[nodiscard]] std::optional<FrontierLike> match_priority_frontier(
+    const FrontierSequence & frontiers) const;
+  [[nodiscard]] bool frontier_near_priority(const FrontierLike & frontier) const;
 
 private:
   struct DispatchContext
