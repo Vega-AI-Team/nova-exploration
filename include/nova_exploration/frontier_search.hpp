@@ -51,7 +51,18 @@ struct FrontierSearchOptions
   int occ_threshold{OCC_THRESHOLD};
   int min_frontier_size_cells{MIN_FRONTIER_SIZE};
   double candidate_min_goal_distance_m{0.0};
+  // Optional no-go mask (map frame, values >= keepout_threshold are forbidden). Unlike the
+  // costmaps it also covers never-observed space, so frontiers inside a zone are rejected
+  // before the robot has mapped it. Cells outside the mask are allowed.
+  std::optional<OccupancyGrid2d> keepout_mask;
+  int keepout_threshold{100};
 };
+
+// Returns true when the world point falls on a keepout cell of the mask (false if no mask).
+bool is_world_point_keepout(
+  const std::optional<OccupancyGrid2d> & keepout_mask,
+  const std::pair<double, double> & world_point,
+  int keepout_threshold = 100);
 
 // Scratch context for one search pass. Stores reusable caches keyed by map cell.
 class FrontierSearchContext
@@ -69,6 +80,10 @@ public:
   bool global_cost_blocked(int map_x, int map_y);
   // Returns whether the aligned or transformed local costmap cell is blocked.
   bool local_cost_blocked(int map_x, int map_y);
+  // Returns whether the occupancy cell lies inside a no-go zone of the keepout mask.
+  bool keepout_blocked(int map_x, int map_y);
+  // True when a keepout mask is configured for this pass.
+  bool has_keepout() const {return search_options_.keepout_mask.has_value();}
   // Starts a new dedup scope for candidate accessibility marking.
   void begin_candidate_accessible_scan();
   // Returns true only on the first mark in the current dedup scope.
@@ -109,6 +124,10 @@ private:
   std::vector<uint8_t> local_cost_blocked_cache_;
   std::vector<uint32_t> local_cost_blocked_cache_stamp_;
   uint32_t local_cost_blocked_generation_{1};
+
+  std::vector<uint8_t> keepout_cache_;
+  std::vector<uint32_t> keepout_cache_stamp_;
+  uint32_t keepout_generation_{1};
 
   std::vector<uint8_t> frontier_eligibility_cache_;
   std::vector<uint32_t> frontier_eligibility_cache_stamp_;

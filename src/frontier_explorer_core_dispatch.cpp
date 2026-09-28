@@ -204,6 +204,7 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
   pending_local_costmap_search_input_update = false;
   distance_completed_frontier.reset();
   last_low_gain_reselection_time_ns.reset();
+  low_gain_canceled_frontier.reset();
   reset_replacement_candidate_tracking();
   last_published_frontier_signature.reset();
   frontier_snapshot.reset();
@@ -556,8 +557,19 @@ if (!active_goal_cost_status.has_value()) {
       return;
     }
   }
+  if (visible_reveal_gain_exhausted &&
+    are_frontiers_equivalent(low_gain_canceled_frontier, active_goal_frontier))
+  {
+    // Already cancelled this frontier for low gain once, and reselection chose it
+    // again -- nothing better exists. Cancelling again only stop-starts the robot
+    // toward the same target (2026-09-25: ~70s of cancel/re-send to the last
+    // 28-cell frontier), so drive on and let arrival or map growth resolve it.
+    reset_replacement_candidate_tracking();
+    return;
+  }
   if (visible_reveal_gain_exhausted) {
     last_low_gain_reselection_time_ns = now_ns;
+    low_gain_canceled_frontier = active_goal_frontier;
 
     const std::string visible_gain_preemption_reason =
     visible_reveal_length.has_value() ?

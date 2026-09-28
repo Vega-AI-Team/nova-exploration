@@ -124,6 +124,10 @@ FrontierSearchContext::FrontierSearchContext(
   global_cost_blocked_cache_stamp_.assign(cell_count, 0);
   local_cost_blocked_cache_.assign(cell_count, 0);
   local_cost_blocked_cache_stamp_.assign(cell_count, 0);
+  if (search_options_.keepout_mask.has_value()) {
+    keepout_cache_.assign(cell_count, 0);
+    keepout_cache_stamp_.assign(cell_count, 0);
+  }
   frontier_eligibility_cache_.assign(cell_count, 0);
   frontier_eligibility_cache_stamp_.assign(cell_count, 0);
   accessible_cell_stamp_.assign(cell_count, 0);
@@ -219,6 +223,40 @@ bool FrontierSearchContext::local_cost_blocked(int map_x, int map_y)
   local_cost_blocked_cache_stamp_[idx] = local_cost_blocked_generation_;
   local_cost_blocked_cache_[idx] = blocked ? 1 : 0;
   return blocked;
+}
+
+bool FrontierSearchContext::keepout_blocked(int map_x, int map_y)
+{
+  if (!search_options_.keepout_mask.has_value()) {
+    return false;
+  }
+  const std::size_t idx = cell_index(map_x, map_y);
+  if (keepout_cache_stamp_[idx] == keepout_generation_) {
+    return keepout_cache_[idx] != 0;
+  }
+
+  const bool blocked = is_world_point_keepout(
+    search_options_.keepout_mask, world_point(map_x, map_y), search_options_.keepout_threshold);
+  keepout_cache_stamp_[idx] = keepout_generation_;
+  keepout_cache_[idx] = blocked ? 1 : 0;
+  return blocked;
+}
+
+bool is_world_point_keepout(
+  const std::optional<OccupancyGrid2d> & keepout_mask,
+  const std::pair<double, double> & world_point,
+  int keepout_threshold)
+{
+  if (!keepout_mask.has_value() || !keepout_mask->valid()) {
+    return false;
+  }
+  int mask_x = 0;
+  int mask_y = 0;
+  if (!keepout_mask->worldToMapNoThrow(world_point.first, world_point.second, mask_x, mask_y)) {
+    // The mask only covers the zones' bounding box; everything outside is allowed.
+    return false;
+  }
+  return keepout_mask->getCost(mask_x, mask_y) >= keepout_threshold;
 }
 
 bool FrontierSearchContext::is_cost_blocked(
@@ -490,6 +528,11 @@ std::optional<FrontierCandidate> build_frontier_candidate(
         return;
       }
 
+      if (context->keepout_blocked(neighbor->mapX, neighbor->mapY)) {
+        // Never send the robot to a goal inside a no-go zone.
+        return;
+      }
+
       const auto world = context->world_point(neighbor->mapX, neighbor->mapY);
       const double centroid_distance_sq = squared_distance(world, frontier_centroid);
       if (centroid_distance_sq < best_any_distance_sq) {
@@ -687,17 +730,26 @@ FrontierSearchResult get_frontier(
       }
     }
 
-    // Continue map-space BFS through cells adjacent to free space.
+    // Continue map-space BFS through cells adjacent to free space. The wavefront may leave a
+    // no-go zone (robot standing in one) but never enter one.
+    const bool point_in_keepout =
+      search_context.has_keepout() && search_context.keepout_blocked(point->mapX, point->mapY);
     for_each_neighbor(point, occupancy_map, frontier_cache, [&](FrontierPoint * neighbor) {
       if (
         !has_classification(neighbor, PointClassification::MapOpen) &&
         !has_classification(neighbor, PointClassification::MapClosed))
       {
+        if (!point_in_keepout && search_context.keepout_blocked(neighbor->mapX, neighbor->mapY)) {
+          // No-go zones are walls for the wavefront: frontiers only reachable through a zone
+          // are never discovered.
+          return;
+        }
         bool has_free_neighbor = false;
         for_each_neighbor(neighbor, occupancy_map, frontier_cache, [&](FrontierPoint * candidate) {
           if (
             occupancy_map.getCost(candidate->mapX, candidate->mapY) ==
-            static_cast<int>(OccupancyGrid2d::CostValues::FreeSpace))
+            static_cast<int>(OccupancyGrid2d::CostValues::FreeSpace) &&
+            (point_in_keepout || !search_context.keepout_blocked(candidate->mapX, candidate->mapY)))
           {
             has_free_neighbor = true;
           }
@@ -768,6 +820,12 @@ bool is_frontier_point(
     return false;
   }
 
+  if (context->keepout_blocked(point->mapX, point->mapY)) {
+    // Unknown space inside a no-go zone is never worth exploring.
+    cache_frontier_eligibility(false);
+    return false;
+  }
+
   // A frontier point must touch free map space and must not be blocked by costmaps.
   bool blocked_neighbor = false;
   bool has_free_neighbor = false;
@@ -780,6 +838,12 @@ bool is_frontier_point(
 
     if (context->global_cost_blocked(neighbor->mapX, neighbor->mapY)) {
       // Any blocked adjacent cell disqualifies this frontier candidate.
+      blocked_neighbor = true;
+      return;
+    }
+
+    if (context->keepout_blocked(neighbor->mapX, neighbor->mapY)) {
+      // Frontier touching a no-go zone: treat like a blocked neighbour.
       blocked_neighbor = true;
       return;
     }

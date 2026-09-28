@@ -16,6 +16,8 @@ limitations under the License.
 
 #include "nova_exploration/frontier_explorer_core.hpp"
 
+#include <algorithm>
+
 #include "frontier_explorer_core_detail.hpp"
 
 namespace nova_exploration
@@ -222,6 +224,51 @@ void FrontierExplorerCore::costmapCallback(const OccupancyGrid2d & map_msg)
 
   commit_deferred_costmap_search_input_updates();
 
+  if (params.map_processing_rate_hz <= 0.0 || !decision_map_dirty) {
+    try_send_next_goal();
+  }
+}
+
+void FrontierExplorerCore::keepoutMaskCallback(const OccupancyGrid2d & mask_msg, bool dispatch)
+{
+  const bool has_zones =
+    mask_msg.valid() && mask_msg.getSizeX() > 0 && mask_msg.getSizeY() > 0 &&
+    std::any_of(
+    mask_msg.map().data.begin(), mask_msg.map().data.end(),
+    [](int8_t value) {return value != 0;});
+  if (has_zones) {
+    keepout_mask = mask_msg;
+  } else {
+    keepout_mask.reset();
+  }
+
+  // Zones change the search input exactly like a costmap update: invalidate every cache keyed
+  // on the costmap generation so no stale frontier inside a new zone survives.
+  pending_costmap_search_input_update = true;
+  mrtsp_order_cache.reset();
+
+  if (!dispatch) {
+    commit_deferred_costmap_search_input_updates();
+    return;
+  }
+
+  if (active_frontier_goal_in_progress()) {
+    // Unlike costmap blockage this is a user command, so it cancels regardless of
+    // goal_skip_on_blocked_goal.
+    const auto active_goal_cost_status = frontier_cost_status(active_goal_frontier);
+    if (active_goal_cost_status.has_value()) {
+      active_goal_blocked_reason = *active_goal_cost_status;
+      request_active_goal_cancel(*active_goal_cost_status);
+    }
+    return;
+  }
+
+  if (goal_in_progress) {
+    // Non-frontier goals (return-to-start) commit the update on their next dispatch.
+    return;
+  }
+
+  commit_deferred_costmap_search_input_updates();
   if (params.map_processing_rate_hz <= 0.0 || !decision_map_dirty) {
     try_send_next_goal();
   }

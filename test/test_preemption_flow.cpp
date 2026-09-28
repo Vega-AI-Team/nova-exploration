@@ -985,6 +985,51 @@ TEST(PreemptionFlowTests, LowGainPreemptionCancelsWithoutSnapshotReselection)
   EXPECT_TRUE(core->pending_frontier_sequence.empty());
 }
 
+TEST(PreemptionFlowTests, LowGainPreemptionKeepsFrontierReselectedAfterLowGainCancel)
+{
+  auto core = make_preemption_core();
+  auto fake_handle = std::make_shared<FakeGoalHandle>();
+  core->goal_handle = fake_handle;
+  core->params.goal_preemption_enabled = true;
+  core->params.goal_preemption_min_interval_s = 0.5;
+  core->params.goal_preemption_lidar_range_m = 4.0;
+  core->params.goal_preemption_lidar_fov_deg = 90.0;
+  core->params.goal_preemption_lidar_ray_step_deg = 1.0;
+  core->params.goal_preemption_lidar_min_reveal_length_m = 0.5;
+  core->replacement_required_hits = 1;
+
+  const FrontierCandidate active_frontier{{4.0, 5.0}, {3.0, 5.0}, 8};
+  core->active_goal_frontier = active_frontier;
+  core->active_goal_frontiers = {*core->active_goal_frontier};
+  // This frontier was already cancelled for low gain and reselection came back to it.
+  core->low_gain_canceled_frontier = active_frontier;
+
+  auto map_msg = build_grid(12, 12, 0);
+  core->map = OccupancyGrid2d(map_msg);
+
+  int frontier_search_calls = 0;
+  core->callbacks.frontier_search = [&frontier_search_calls, active_frontier](
+    const geometry_msgs::msg::Pose &,
+    const OccupancyGrid2d &,
+    const OccupancyGrid2d &,
+    const std::optional<OccupancyGrid2d> &,
+    double,
+    bool)
+    {
+      frontier_search_calls += 1;
+      FrontierSearchResult result;
+      result.frontiers = {active_frontier};
+      result.robot_map_cell = {0, 0};
+      return result;
+    };
+
+  core->consider_preempt_active_goal("map");
+
+  EXPECT_EQ(frontier_search_calls, 0);
+  EXPECT_EQ(fake_handle->cancel_calls, 0);
+  EXPECT_TRUE(core->pending_frontier_sequence.empty());
+}
+
 TEST(PreemptionFlowTests, CompletionDistanceTreatsNearFrontierAsCompleteWithVisibleGainGate)
 {
   std::vector<std::string> info_logs;

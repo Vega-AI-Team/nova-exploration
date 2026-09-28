@@ -150,6 +150,8 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   this->declare_parameter<bool>("completion_event_enabled", false);
   this->declare_parameter<std::string>("completion_event_topic", "exploration_complete");
   this->declare_parameter<std::string>("priority_frontier_topic", "explore/priority_frontier");
+  // Empty disables no-go zones. The mask is a latched map-frame OccupancyGrid (100 = forbidden).
+  this->declare_parameter<std::string>("keepout_mask_topic", "");
   this->declare_parameter<std::string>("frontier_info_topic", "explore/frontiers_info");
   this->declare_parameter<double>("priority_match_radius_m", 1.5);
 
@@ -244,6 +246,7 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   params_.priority_match_radius_m = std::max(
     0.1, this->get_parameter("priority_match_radius_m").as_double());
   priority_frontier_topic_ = this->get_parameter("priority_frontier_topic").as_string();
+  keepout_mask_topic_ = this->get_parameter("keepout_mask_topic").as_string();
   frontier_info_topic_ = this->get_parameter("frontier_info_topic").as_string();
   completion_event_config_.enabled = this->get_parameter("completion_event_enabled").as_bool();
   completion_event_config_.topic = this->get_parameter("completion_event_topic").as_string();
@@ -361,6 +364,14 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
       RCLCPP_ERROR(this->get_logger(), "%s", message.c_str());
     };
   core_ = std::make_unique<FrontierExplorerCore>(params_, callbacks);
+  if (!keepout_mask_topic_.empty()) {
+    keepout_mask_sub_ = this->create_subscription<nav_msgs::msg::OccupancyGrid>(
+      keepout_mask_topic_,
+      rclcpp::QoS(1).reliable().transient_local(),
+      std::bind(&FrontierExplorerNode::keepoutMaskCallback, this, std::placeholders::_1));
+    RCLCPP_INFO(
+      this->get_logger(), "No-go zones enabled from keepout mask '%s'", keepout_mask_topic_.c_str());
+  }
   runtime_state_ = RuntimeState::COLD_IDLE;
   if (!autostart_) {
     core_->stop_exploration_session("Frontier exploration initialized in cold idle mode");
@@ -1161,6 +1172,26 @@ void FrontierExplorerNode::localCostmapCallback(const nav_msgs::msg::OccupancyGr
     return;
   }
   core_->localCostmapCallback(OccupancyGrid2d(msg));
+}
+
+void FrontierExplorerNode::keepoutMaskCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg)
+{
+  if (!core_) {
+    return;
+  }
+  if (!msg->header.frame_id.empty() && msg->header.frame_id != params_.global_frame) {
+    // Zones are drawn in the map frame; a mismatched mask would put them in the wrong place.
+    RCLCPP_ERROR(
+      this->get_logger(), "Ignoring keepout mask in frame '%s' (expected '%s')",
+      msg->header.frame_id.c_str(), params_.global_frame.c_str());
+    return;
+  }
+  const bool running = runtime_state_ == RuntimeState::RUNNING;
+  core_->keepoutMaskCallback(OccupancyGrid2d(msg), running);
+  RCLCPP_INFO(
+    this->get_logger(), "Keepout mask updated (%ux%u @ %.2f m, %s)",
+    msg->info.width, msg->info.height, msg->info.resolution,
+    core_->keepout_mask.has_value() ? "zones active" : "no zones");
 }
 
 void FrontierExplorerNode::publishCompletionEvent()

@@ -60,6 +60,7 @@ private:
   void occupancyGridCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void costmapCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void localCostmapCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
+  void keepoutMaskCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void publishCompletionEvent();
 
   std::optional<geometry_msgs::msg::Pose> getCurrentPose();
@@ -157,6 +158,9 @@ private:
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_sub_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr local_costmap_sub_;
+  // No-go zone mask; lives for the node's lifetime so the latched mask survives idle periods.
+  std::string keepout_mask_topic_;
+  rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr keepout_mask_sub_;
   rclcpp::TimerBase::SharedPtr map_autodetect_timer_;
   rclcpp::TimerBase::SharedPtr map_processing_timer_;
   rclcpp::TimerBase::SharedPtr suppression_watchdog_timer_;

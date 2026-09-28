@@ -460,6 +460,11 @@ std::optional<std::string> FrontierExplorerCore::frontier_cost_status(
 
   const auto goal_point = frontier_position(*frontier);
 
+  if (is_world_point_keepout(keepout_mask, goal_point)) {
+    // No-go zones override everything: they may cover space the costmaps have never seen.
+    return std::string("Current frontier target is inside a no-go zone");
+  }
+
   const auto local_cost = world_point_cost(local_costmap, goal_point);
   if (local_cost.has_value() && *local_cost >= params.occ_threshold) {
     // Local map blocks have priority because they are most immediate for controller safety.

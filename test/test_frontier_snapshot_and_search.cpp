@@ -213,6 +213,96 @@ TEST(FrontierSearchTests, LocalCostmapBlockingDoesNotEliminateFrontierExtraction
   EXPECT_FALSE(result.frontiers.empty());
 }
 
+// Corridor world for keepout tests: 12x9 unknown grid with a free 3-row corridor x=1..10, y=3..5.
+OccupancyGrid2d keepout_corridor_map()
+{
+  auto map_msg = build_grid(12, 9, -1);
+  std::vector<std::pair<int, int>> free_cells;
+  for (int x = 1; x <= 10; ++x) {
+    for (int y = 3; y <= 5; ++y) {
+      free_cells.emplace_back(x, y);
+    }
+  }
+  set_cells(map_msg, free_cells, 0);
+  return OccupancyGrid2d(map_msg);
+}
+
+// Full-height keepout strip covering world x in [x0, x0 + width) on a mask with its own origin.
+OccupancyGrid2d keepout_strip(double x0, int width)
+{
+  auto mask = build_grid(width, 9, 100);
+  mask.info.origin.position.x = x0;
+  mask.header.frame_id = "map";
+  return OccupancyGrid2d(mask);
+}
+
+TEST(FrontierSearchTests, KeepoutMaskHidesFrontiersBehindZone)
+{
+  const auto occupancy_map = keepout_corridor_map();
+  const OccupancyGrid2d costmap(build_grid(12, 9, 0));
+
+  // Baseline: without zones the far end of the corridor yields frontiers.
+  const auto baseline = get_frontier(make_pose(2.5, 4.5), occupancy_map, costmap);
+  bool baseline_has_far_frontier = false;
+  for (const auto & frontier : baseline.frontiers) {
+    baseline_has_far_frontier |= frontier.goal_point.has_value() && frontier.goal_point->first > 7.0;
+  }
+  ASSERT_TRUE(baseline_has_far_frontier);
+
+  FrontierSearchOptions options;
+  options.keepout_mask = keepout_strip(6.0, 1);
+  const auto result = get_frontier(
+    make_pose(2.5, 4.5), occupancy_map, costmap, std::nullopt, 0.0, false, options);
+
+  EXPECT_FALSE(result.frontiers.empty());
+  for (const auto & frontier : result.frontiers) {
+    // The wavefront must neither enter the zone nor pass through it.
+    ASSERT_TRUE(frontier.goal_point.has_value());
+    EXPECT_LT(frontier.goal_point->first, 6.0);
+    EXPECT_LT(frontier.centroid.first, 6.0);
+  }
+}
+
+TEST(FrontierSearchTests, KeepoutMaskRejectsUnknownSpaceInsideZone)
+{
+  const auto occupancy_map = keepout_corridor_map();
+  const OccupancyGrid2d costmap(build_grid(12, 9, 0));
+
+  // A zone spanning the whole map leaves nothing to explore besides the robot's own cell.
+  FrontierSearchOptions options;
+  options.keepout_mask = keepout_strip(-1.0, 14);
+  const auto result = get_frontier(
+    make_pose(8.5, 4.5), occupancy_map, costmap, std::nullopt, 0.0, false, options);
+  EXPECT_TRUE(result.frontiers.empty());
+}
+
+TEST(FrontierSearchTests, KeepoutMaskLetsRobotInsideZoneLeave)
+{
+  const auto occupancy_map = keepout_corridor_map();
+  const OccupancyGrid2d costmap(build_grid(12, 9, 0));
+
+  // Robot parked inside a zone: the search walks out of it rather than reporting "complete".
+  FrontierSearchOptions options;
+  options.keepout_mask = keepout_strip(1.0, 3);
+  const auto result = get_frontier(
+    make_pose(2.5, 4.5), occupancy_map, costmap, std::nullopt, 0.0, false, options);
+
+  EXPECT_FALSE(result.frontiers.empty());
+  for (const auto & frontier : result.frontiers) {
+    ASSERT_TRUE(frontier.goal_point.has_value());
+    EXPECT_GE(frontier.goal_point->first, 4.0);
+  }
+}
+
+TEST(FrontierSearchTests, WorldPointKeepoutIsFalseOutsideMask)
+{
+  const auto mask = std::optional<OccupancyGrid2d>(keepout_strip(6.0, 1));
+  EXPECT_TRUE(is_world_point_keepout(mask, {6.5, 4.5}));
+  EXPECT_FALSE(is_world_point_keepout(mask, {5.5, 4.5}));
+  EXPECT_FALSE(is_world_point_keepout(mask, {7.5, 4.5}));
+  EXPECT_FALSE(is_world_point_keepout(std::nullopt, {6.5, 4.5}));
+}
+
 TEST(FrontierSearchTests, FrontierChoiceDeterministicAcrossIdenticalRuns)
 {
   std::vector<std::pair<int, int>> free_cells;
@@ -633,6 +723,29 @@ TEST(FrontierSnapshotTests, CostmapCallbacksOnlyBumpGenerationWhenSearchInputCha
 
   EXPECT_EQ(core->costmap_generation, initial_costmap_generation + 1);
   EXPECT_EQ(core->local_costmap_generation, initial_local_costmap_generation + 1);
+}
+
+TEST(FrontierSnapshotTests, KeepoutMaskUpdatesInvalidateSearchAndFlagGoals)
+{
+  auto core = make_snapshot_core();
+  const int initial_costmap_generation = core->costmap_generation;
+
+  core->keepoutMaskCallback(keepout_strip(6.0, 1), false);
+  ASSERT_TRUE(core->keepout_mask.has_value());
+  EXPECT_EQ(core->costmap_generation, initial_costmap_generation + 1);
+  ASSERT_TRUE(core->frontier_search_options().keepout_mask.has_value());
+
+  const auto inside = core->frontier_cost_status(
+    std::optional<FrontierLike>{make_frontier(6.5, 4.5)});
+  ASSERT_TRUE(inside.has_value());
+  EXPECT_NE(inside->find("no-go"), std::string::npos);
+  EXPECT_FALSE(
+    core->frontier_cost_status(std::optional<FrontierLike>{make_frontier(2.5, 4.5)}).has_value());
+
+  // An all-free mask (last zone deleted) clears the zones and invalidates again.
+  core->keepoutMaskCallback(OccupancyGrid2d(build_grid(1, 1, 0)), false);
+  EXPECT_FALSE(core->keepout_mask.has_value());
+  EXPECT_EQ(core->costmap_generation, initial_costmap_generation + 2);
 }
 
 TEST(FrontierSnapshotTests, SnapshotInvalidatesOnRobotCellChange)

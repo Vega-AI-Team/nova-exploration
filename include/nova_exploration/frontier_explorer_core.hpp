@@ -164,6 +164,9 @@ public:
   void occupancyGridCallback(const OccupancyGrid2d & map_msg);
   void costmapCallback(const OccupancyGrid2d & map_msg);
   void localCostmapCallback(const OccupancyGrid2d & map_msg);
+  // No-go zone mask (latched from map_manager). An empty/invalid grid clears it. With
+  // dispatch=false (exploration idle) the mask is only stored for the next session.
+  void keepoutMaskCallback(const OccupancyGrid2d & mask_msg, bool dispatch = true);
   void ingestRawMapUpdate(const OccupancyGrid2d & map_msg);
   void handleUrgentRawMapUpdateForActiveGoal();
   void processPendingMapUpdate();
@@ -355,6 +358,7 @@ public:
   DecisionMapWorkspace decision_map_workspace;
   std::optional<OccupancyGrid2d> costmap;
   std::optional<OccupancyGrid2d> local_costmap;
+  std::optional<OccupancyGrid2d> keepout_mask;
   int map_generation{0};
   int decision_map_generation{0};
   int costmap_generation{0};
@@ -445,6 +449,10 @@ public:
   std::optional<std::string> active_goal_blocked_reason;
   std::optional<FrontierLike> distance_completed_frontier;
   std::optional<int64_t> last_low_gain_reselection_time_ns;
+  // Frontier most recently cancelled for low visible gain. Survives the cancel so
+  // that, if reselection comes straight back to it, the goal is kept instead of
+  // being cancelled again every goal_preemption_min_interval_s.
+  std::optional<FrontierLike> low_gain_canceled_frontier;
 
   // Replacement frontier debouncing and marker deduplication state.
   std::optional<FrontierLike> replacement_candidate_frontier;
