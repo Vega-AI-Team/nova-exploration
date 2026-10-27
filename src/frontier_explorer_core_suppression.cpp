@@ -79,6 +79,12 @@ FrontierSequence FrontierExplorerCore::filter_frontiers_for_suppression(
 void FrontierExplorerCore::record_failed_frontier_attempt(
   const std::optional<FrontierLike> & frontier)
 {
+  if (frontier.has_value()) {
+    // A sparse patch the robot cannot reach would otherwise be re-offered after suppression
+    // expires, turning a finished map into an all-suppressed one.
+    const auto goal_point = frontier_position(*frontier);
+    note_sparse_coverage_checked_point(goal_point.first, goal_point.second, true);
+  }
   const int64_t now_ns = callbacks.now_ns();
   if (!suppression_runtime_active(now_ns) || !frontier.has_value()) {
     return;

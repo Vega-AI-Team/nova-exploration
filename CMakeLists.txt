@@ -44,6 +44,7 @@ add_library(${PROJECT_NAME}_core
   src/frontier_explorer_core_dispatch.cpp
   src/mrtsp_ordering.cpp
   src/mrtsp_solver.cpp
+  src/sparse_coverage.cpp
 )
 target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -228,6 +229,21 @@ if(BUILD_TESTING)
     ${CMAKE_CURRENT_SOURCE_DIR}/include
   )
   ament_target_dependencies(test_frontier_suppression
+    action_msgs
+    geometry_msgs
+    nav_msgs
+  )
+
+  ament_add_gtest(test_sparse_coverage
+    test/test_sparse_coverage.cpp
+  )
+  target_link_libraries(test_sparse_coverage
+    ${PROJECT_NAME}_core
+  )
+  target_include_directories(test_sparse_coverage PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  ament_target_dependencies(test_sparse_coverage
     action_msgs
     geometry_msgs
     nav_msgs

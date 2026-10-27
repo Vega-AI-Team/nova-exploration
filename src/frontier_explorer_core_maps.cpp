@@ -65,6 +65,22 @@ void FrontierExplorerCore::refresh_decision_map()
     decision_map_config(),
     decision_map_workspace);
   decision_map_msg = decision_map_workspace.optimized_map_msg;
+  bool output_changed = status.output_changed;
+  if (params.sparse_coverage_enabled && decision_map_msg) {
+    // The overlay goes on a copy: the workspace output is the base for incremental rebuilds.
+    auto overlaid_msg = std::make_shared<nav_msgs::msg::OccupancyGrid>(*decision_map_msg);
+    sparse_coverage_remarked_cells = apply_sparse_coverage(
+      map->map(),
+      *overlaid_msg,
+      sparse_coverage_checked_points,
+      sparse_coverage_config());
+    // The overlay also changes when only the trail moved, so compare the final grid.
+    output_changed =
+      !previous_decision_map_msg ||
+      status.geometry_changed ||
+      previous_decision_map_msg->data != overlaid_msg->data;
+    decision_map_msg = overlaid_msg;
+  }
   if (
     !decision_map.has_value() ||
     previous_decision_map_msg != decision_map_msg ||
@@ -73,7 +89,7 @@ void FrontierExplorerCore::refresh_decision_map()
     decision_map = OccupancyGrid2d(decision_map_msg);
   }
 
-  if (status.output_changed || !decision_map.has_value()) {
+  if (output_changed || !decision_map.has_value()) {
     decision_map_generation += 1;
     decision_map_cache_misses += 1;
     frontier_snapshot.reset();
@@ -84,7 +100,8 @@ void FrontierExplorerCore::refresh_decision_map()
         "decision_map: miss, raw_generation=" + std::to_string(map_generation) +
         ", decision_generation=" + std::to_string(decision_map_generation) +
         ", optimization_enabled=" +
-        std::string(frontier_map_optimization_enabled() ? "true" : "false"));
+        std::string(frontier_map_optimization_enabled() ? "true" : "false") +
+        ", sparse_coverage_cells=" + std::to_string(sparse_coverage_remarked_cells));
     }
     return;
   }
@@ -98,6 +115,26 @@ void FrontierExplorerCore::refresh_decision_map()
       ", optimization_enabled=" +
       std::string(frontier_map_optimization_enabled() ? "true" : "false"));
   }
+}
+
+void FrontierExplorerCore::note_sparse_coverage_checked_point(double x, double y, bool force)
+{
+  if (!params.sparse_coverage_enabled) {
+    return;
+  }
+  if (!force) {
+    const double spacing_sq =
+      params.sparse_coverage_trail_spacing_m * params.sparse_coverage_trail_spacing_m;
+    for (const auto & point : sparse_coverage_checked_points) {
+      const double dx = point.first - x;
+      const double dy = point.second - y;
+      if ((dx * dx) + (dy * dy) < spacing_sq) {
+        return;
+      }
+    }
+  }
+  sparse_coverage_checked_points.emplace_back(x, y);
+  decision_map_dirty = true;
 }
 
 void FrontierExplorerCore::ingestRawMapUpdate(const OccupancyGrid2d & map_msg)

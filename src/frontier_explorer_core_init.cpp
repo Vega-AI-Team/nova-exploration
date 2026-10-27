@@ -204,6 +204,18 @@ DecisionMapConfig FrontierExplorerCore::decision_map_config() const
   return config;
 }
 
+SparseCoverageConfig FrontierExplorerCore::sparse_coverage_config() const
+{
+  SparseCoverageConfig config;
+  config.occ_threshold = params.occ_threshold;
+  config.window_radius_m = params.sparse_coverage_window_radius_m;
+  config.min_unknown_ratio = params.sparse_coverage_min_unknown_ratio;
+  config.max_hole_cells = params.sparse_coverage_max_hole_cells;
+  config.max_hole_occupied_border_ratio = params.sparse_coverage_max_hole_occupied_border_ratio;
+  config.checked_radius_m = params.sparse_coverage_checked_radius_m;
+  return config;
+}
+
 FrontierSequence FrontierExplorerCore::to_frontier_sequence(
   const std::vector<FrontierCandidate> & frontiers)
 {

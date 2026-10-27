@@ -253,6 +253,8 @@ FrontierSnapshot FrontierExplorerCore::get_frontier_snapshot(
   const geometry_msgs::msg::Pose & current_pose,
   double min_goal_distance)
 {
+  // Space next to the robot has been looked at; the sparse-coverage pass leaves it alone.
+  note_sparse_coverage_checked_point(current_pose.position.x, current_pose.position.y, false);
   if (!decision_map.has_value() || decision_map_dirty) {
     if (!map.has_value()) {
       throw std::logic_error("Decision map is not initialized");

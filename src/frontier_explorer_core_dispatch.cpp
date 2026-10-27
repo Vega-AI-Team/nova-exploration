@@ -227,6 +227,8 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
     decision_map_dirty = false;
     decision_map_cache_hits = 0;
     decision_map_cache_misses = 0;
+    sparse_coverage_checked_points.clear();
+    sparse_coverage_remarked_cells = 0;
     frontier_snapshot_cache_hits = 0;
     frontier_snapshot_cache_misses = 0;
     mrtsp_order_cache_hits = 0;

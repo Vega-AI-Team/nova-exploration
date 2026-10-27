@@ -32,6 +32,7 @@ limitations under the License.
 #include "nova_exploration/frontier_policy.hpp"
 #include "nova_exploration/frontier_search.hpp"
 #include "nova_exploration/decision_map.hpp"
+#include "nova_exploration/sparse_coverage.hpp"
 #include "nova_exploration/mrtsp_ordering.hpp"
 #include "nova_exploration/frontier_types.hpp"
 
@@ -76,6 +77,15 @@ struct FrontierExplorerCoreParams
   double sigma_s{2.0};
   double sigma_r{30.0};
   int dilation_kernel_radius_cells{1};
+  // Re-mark barely-observed free space as unknown in the decision map (see sparse_coverage.hpp).
+  bool sparse_coverage_enabled{false};
+  double sparse_coverage_window_radius_m{0.30};
+  double sparse_coverage_min_unknown_ratio{0.15};
+  int sparse_coverage_max_hole_cells{150};
+  double sparse_coverage_max_hole_occupied_border_ratio{0.0};
+  double sparse_coverage_checked_radius_m{1.0};
+  // Spacing of the robot-trail points that mark space as already looked at.
+  double sparse_coverage_trail_spacing_m{0.25};
   double sensor_effective_range_m{1.5};
   double weight_distance_wd{1.0};
   double weight_gain_ws{1.0};
@@ -174,6 +184,9 @@ public:
   [[nodiscard]] bool frontier_map_optimization_enabled() const;
   [[nodiscard]] FrontierSearchOptions frontier_search_options() const;
   [[nodiscard]] DecisionMapConfig decision_map_config() const;
+  [[nodiscard]] SparseCoverageConfig sparse_coverage_config() const;
+  // Records a point the sparse-coverage pass must leave alone. force skips the trail spacing.
+  void note_sparse_coverage_checked_point(double x, double y, bool force);
   void refresh_decision_map();
   FrontierSequence build_mrtsp_frontier_sequence(
     const FrontierSequence & frontiers,
@@ -365,6 +378,9 @@ public:
   int local_costmap_generation{0};
   int decision_map_cache_hits{0};
   int decision_map_cache_misses{0};
+  // Robot trail + failed goal points (world frame) excluded from sparse-coverage re-marking.
+  std::vector<std::pair<double, double>> sparse_coverage_checked_points;
+  std::size_t sparse_coverage_remarked_cells{0};
 
   // Frontier snapshot cache keyed by decision/costmap generations + robot cell + min distance.
   std::optional<FrontierSnapshot> frontier_snapshot;

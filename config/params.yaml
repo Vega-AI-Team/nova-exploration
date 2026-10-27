@@ -203,6 +203,23 @@ frontier_explorer:
     # Example: 0 keeps the map literal, 2 can merge thin fragmented frontiers.
     dilation_kernel_radius_cells: 1
 
+    # Re-mark barely-observed free space (dense with small ray-gap holes the filter above
+    # erases) as unknown, so the robot goes back to look at it. Gaps bordering obstacles never
+    # count; nothing within checked_radius_m of the robot's trail or a failed goal is re-marked.
+    sparse_coverage_enabled: false
+    # Radius of the window the hole density is measured over.
+    sparse_coverage_window_radius_m: 0.30
+    # Hole cells / (hole + free cells) in the window at or above which a free cell is re-marked.
+    sparse_coverage_min_unknown_ratio: 0.15
+    # Unknown components larger than this are real unexplored space, not ray gaps.
+    sparse_coverage_max_hole_cells: 150
+    # Fraction of a component's border allowed on obstacles; 0 = any obstacle contact makes it a shadow.
+    sparse_coverage_max_hole_occupied_border_ratio: 0.0
+    # Space within this distance of the robot's trail or a failed goal is never re-marked.
+    sparse_coverage_checked_radius_m: 1.0
+    # Spacing of the recorded robot-trail points.
+    sparse_coverage_trail_spacing_m: 0.25
+
 
     # --------------- Preemption --------------- #
 
