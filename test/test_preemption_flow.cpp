@@ -313,8 +313,10 @@ TEST(PreemptionFlowTests, BlockedGoalWithoutReplacementUsesExplicitCancel)
   core->consider_preempt_active_goal("map");
 
   EXPECT_EQ(fake_handle->cancel_calls, 1);
-  ASSERT_FALSE(debug_logs.empty());
-  EXPECT_NE(debug_logs.back().find("no replacement frontier is available"), std::string::npos);
+  // The cancel reason is logged at info so dropped goals show in normal logs.
+  ASSERT_FALSE(info_logs.empty());
+  EXPECT_NE(info_logs.back().find("Canceling active goal: "), std::string::npos);
+  EXPECT_NE(info_logs.back().find("no replacement frontier is available"), std::string::npos);
 }
 
 TEST(PreemptionFlowTests, BlockedGoalReplacementLogsSkipVerb)
@@ -1559,6 +1561,267 @@ TEST(PreemptionFlowTests, GoalSucceededRedispatchesImmediatelyWhenPostGoalSettle
   EXPECT_FALSE(core.awaiting_map_refresh);
   EXPECT_FALSE(core.post_goal_settle_active);
   EXPECT_EQ(dispatch_calls, 2);
+}
+
+// 2026-10-28 exploration fixes: loose target tracking, near-goal hold, arrival spin, final sweep.
+TEST(PreemptionFlowTests, TrackRadiusMatchesFrontierThatShiftedAsItWasRevealed)
+{
+  auto core = make_preemption_core();
+  core->params.frontier_visit_tolerance = 0.4;
+  core->params.goal_preemption_track_radius_m = 1.5;
+  const std::optional<FrontierLike> active = FrontierCandidate{{5.0, 5.0}, {5.0, 5.0}, 20};
+
+  const FrontierSequence shifted{FrontierCandidate{{5.8, 5.0}, {5.6, 5.3}, 12}};
+  EXPECT_FALSE(core->frontier_exists_in_set(active, shifted));
+  EXPECT_TRUE(core->frontier_tracked_in_set(active, shifted));
+
+  const FrontierSequence elsewhere{FrontierCandidate{{8.0, 5.0}, {8.0, 5.0}, 12}};
+  EXPECT_FALSE(core->frontier_tracked_in_set(active, elsewhere));
+
+  // Below frontier_visit_tolerance the radius falls back to it.
+  core->params.goal_preemption_track_radius_m = 0.0;
+  EXPECT_FALSE(core->frontier_tracked_in_set(active, shifted));
+}
+
+TEST(PreemptionFlowTests, NearGoalKeepsActiveGoalWithoutSnapshotOrCancel)
+{
+  auto core = make_preemption_core();
+  auto fake_handle = std::make_shared<FakeGoalHandle>();
+  core->goal_handle = fake_handle;
+  core->params.frontier_candidate_min_goal_distance_m = 1.0;
+  core->params.goal_preemption_complete_if_within_m = 0.0;
+  core->active_goal_frontier = make_frontier(1.0, 1.0);
+  core->active_goal_frontiers = {*core->active_goal_frontier};
+  core->callbacks.get_current_pose = []() {
+      return std::optional<geometry_msgs::msg::Pose>(make_pose(0.4, 0.6));
+    };
+
+  int frontier_search_calls = 0;
+  core->callbacks.frontier_search = [&frontier_search_calls](
+    const geometry_msgs::msg::Pose &,
+    const OccupancyGrid2d &,
+    const OccupancyGrid2d &,
+    const std::optional<OccupancyGrid2d> &,
+    double,
+    bool)
+    {
+      frontier_search_calls += 1;
+      FrontierSearchResult result;
+      result.robot_map_cell = {0, 0};
+      return result;
+    };
+
+  core->consider_preempt_active_goal("map");
+
+  EXPECT_EQ(frontier_search_calls, 0);
+  EXPECT_EQ(fake_handle->cancel_calls, 0);
+  EXPECT_TRUE(core->goal_in_progress);
+}
+
+struct ArrivalSpinHarness
+{
+  int dispatch_calls{0};
+  int search_calls{0};
+  int spin_requests{0};
+  int spin_cancels{0};
+  bool spin_available{true};
+  std::function<void(bool)> spin_done;
+  geometry_msgs::msg::Pose pose{make_pose(1.0, 1.0)};
+  std::unique_ptr<FrontierExplorerCore> core;
+
+  ArrivalSpinHarness()
+  {
+    FrontierExplorerCoreParams params;
+    params.post_goal_settle_enabled = false;
+    params.return_to_start_on_complete = false;
+    params.arrival_spin_enabled = true;
+    params.arrival_spin_angle_deg = 360.0;
+    params.arrival_spin_min_spacing_m = 1.5;
+
+    FrontierExplorerCoreCallbacks callbacks;
+    int64_t * now = &now_ns;
+    callbacks.now_ns = [now]() {
+        *now += 100'000'000;
+        return *now;
+      };
+    callbacks.get_current_pose = [this]() {return std::optional<geometry_msgs::msg::Pose>(pose);};
+    callbacks.log_info = [](const std::string &) {};
+    callbacks.log_warn = [](const std::string &) {};
+    callbacks.log_debug = [](const std::string &) {};
+    callbacks.log_error = [](const std::string &) {};
+    callbacks.wait_for_action_server = [](double) {return true;};
+    callbacks.dispatch_goal_request = [this](const GoalDispatchRequest &) {dispatch_calls += 1;};
+    callbacks.request_arrival_spin = [this](double, std::function<void(bool)> on_done) {
+        if (!spin_available) {
+          return false;
+        }
+        spin_requests += 1;
+        spin_done = std::move(on_done);
+        return true;
+      };
+    callbacks.cancel_arrival_spin = [this]() {spin_cancels += 1;};
+    // A different frontier each search, so reached ones never look revisited.
+    callbacks.frontier_search = [this](
+      const geometry_msgs::msg::Pose &,
+      const OccupancyGrid2d &,
+      const OccupancyGrid2d &,
+      const std::optional<OccupancyGrid2d> &,
+      double,
+      bool)
+      {
+        const double x = 3.0 + 4.0 * static_cast<double>(search_calls++ % 4);
+        FrontierSearchResult result;
+        result.frontiers = {FrontierCandidate{{x, 15.0}, {x, 15.0}, 10}};
+        result.robot_map_cell = {1, 1};
+        return result;
+      };
+
+    core = std::make_unique<FrontierExplorerCore>(params, callbacks);
+    auto map_msg = build_grid(20, 20, 0);
+    auto costmap_msg = build_grid(20, 20, 0);
+    core->map = OccupancyGrid2d(map_msg);
+    core->costmap = OccupancyGrid2d(costmap_msg);
+    core->map_generation = 1;
+    core->costmap_generation = 1;
+    core->local_costmap_generation = 0;
+  }
+
+  void reach_current_goal()
+  {
+    auto handle = std::make_shared<FakeGoalHandle>();
+    core->goal_response_callback(core->current_dispatch_id, handle, true, "");
+    core->get_result_callback(
+      core->current_dispatch_id,
+      action_msgs::msg::GoalStatus::STATUS_SUCCEEDED,
+      0,
+      "");
+  }
+
+  int64_t now_ns{1'000'000'000};
+};
+
+TEST(PreemptionFlowTests, ArrivalSpinHoldsSchedulingUntilTheTurnFinishes)
+{
+  ArrivalSpinHarness h;
+  h.core->try_send_next_goal();
+  ASSERT_EQ(h.dispatch_calls, 1);
+
+  h.reach_current_goal();
+  EXPECT_EQ(h.spin_requests, 1);
+  EXPECT_TRUE(h.core->arrival_spin_in_progress);
+  EXPECT_EQ(h.dispatch_calls, 1);
+
+  // Map updates during the turn must not dispatch.
+  h.core->try_send_next_goal();
+  EXPECT_EQ(h.dispatch_calls, 1);
+
+  h.spin_done(true);
+  EXPECT_FALSE(h.core->arrival_spin_in_progress);
+  EXPECT_EQ(h.dispatch_calls, 2);
+}
+
+TEST(PreemptionFlowTests, ArrivalSpinSkippedNearAnEarlierSpin)
+{
+  ArrivalSpinHarness h;
+  h.core->try_send_next_goal();
+  h.reach_current_goal();
+  h.spin_done(false);
+  ASSERT_EQ(h.dispatch_calls, 2);
+
+  h.pose = make_pose(1.5, 1.5);
+  h.reach_current_goal();
+  EXPECT_EQ(h.spin_requests, 1);
+  EXPECT_EQ(h.dispatch_calls, 3);
+
+  h.pose = make_pose(4.0, 1.0);
+  h.reach_current_goal();
+  EXPECT_EQ(h.spin_requests, 2);
+  EXPECT_EQ(h.dispatch_calls, 3);
+}
+
+TEST(PreemptionFlowTests, ArrivalSpinUnavailableContinuesExploring)
+{
+  ArrivalSpinHarness h;
+  h.spin_available = false;
+  h.core->try_send_next_goal();
+  h.reach_current_goal();
+  EXPECT_FALSE(h.core->arrival_spin_in_progress);
+  EXPECT_EQ(h.dispatch_calls, 2);
+}
+
+TEST(PreemptionFlowTests, StopDuringArrivalSpinCancelsItAndIgnoresLateResult)
+{
+  ArrivalSpinHarness h;
+  h.core->try_send_next_goal();
+  h.reach_current_goal();
+  ASSERT_TRUE(h.core->arrival_spin_in_progress);
+
+  h.core->stop_exploration_session("test stop");
+  EXPECT_EQ(h.spin_cancels, 1);
+  EXPECT_FALSE(h.core->arrival_spin_in_progress);
+
+  h.spin_done(true);
+  EXPECT_EQ(h.dispatch_calls, 1);
+}
+
+TEST(PreemptionFlowTests, FinalSweepSearchesOnceMoreWithRelaxedHolesBeforeCompleting)
+{
+  FrontierExplorerCoreParams params;
+  params.post_goal_settle_enabled = false;
+  params.return_to_start_on_complete = false;
+  params.sparse_coverage_enabled = true;
+  params.sparse_coverage_max_hole_occupied_border_ratio = 0.0;
+  params.final_sweep_enabled = true;
+  params.final_sweep_max_hole_occupied_border_ratio = 0.5;
+
+  FrontierExplorerCoreCallbacks callbacks;
+  callbacks.now_ns = []() {return int64_t{5'000'000'000};};
+  callbacks.get_current_pose = []() {
+      return std::optional<geometry_msgs::msg::Pose>(make_pose(1.0, 1.0));
+    };
+  callbacks.log_info = [](const std::string &) {};
+  callbacks.log_warn = [](const std::string &) {};
+  callbacks.log_debug = [](const std::string &) {};
+  callbacks.log_error = [](const std::string &) {};
+  callbacks.wait_for_action_server = [](double) {return true;};
+  int completion_calls = 0;
+  callbacks.on_exploration_complete = [&completion_calls]() {completion_calls += 1;};
+  std::vector<double> border_ratios_seen;
+  FrontierExplorerCore * core_ptr = nullptr;
+  callbacks.frontier_search = [&border_ratios_seen, &core_ptr](
+    const geometry_msgs::msg::Pose &,
+    const OccupancyGrid2d &,
+    const OccupancyGrid2d &,
+    const std::optional<OccupancyGrid2d> &,
+    double,
+    bool)
+    {
+      border_ratios_seen.push_back(core_ptr->sparse_coverage_config().max_hole_occupied_border_ratio);
+      FrontierSearchResult result;
+      result.robot_map_cell = {1, 1};
+      return result;
+    };
+
+  FrontierExplorerCore core(params, callbacks);
+  core_ptr = &core;
+  auto map_msg = build_grid(20, 20, 0);
+  auto costmap_msg = build_grid(20, 20, 0);
+  core.map = OccupancyGrid2d(map_msg);
+  core.costmap = OccupancyGrid2d(costmap_msg);
+  core.map_generation = 1;
+  core.costmap_generation = 1;
+  core.local_costmap_generation = 0;
+
+  core.try_send_next_goal();
+
+  ASSERT_EQ(border_ratios_seen.size(), 2U);
+  EXPECT_DOUBLE_EQ(border_ratios_seen[0], 0.0);
+  EXPECT_DOUBLE_EQ(border_ratios_seen[1], 0.5);
+  EXPECT_TRUE(core.final_sweep_active);
+  EXPECT_EQ(completion_calls, 1);
+
+  core.try_send_next_goal();
+  EXPECT_EQ(border_ratios_seen.size(), 2U);
 }
 
 }  // namespace

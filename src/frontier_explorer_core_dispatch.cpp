@@ -46,6 +46,11 @@ void FrontierExplorerCore::try_send_next_goal()
     return;
   }
 
+  if (arrival_spin_in_progress) {
+    // arrival_spin_finished() resumes scheduling.
+    return;
+  }
+
   commit_deferred_costmap_search_input_updates();
 
   if (awaiting_map_refresh && !post_goal_settle_ready()) {
@@ -132,6 +137,11 @@ void FrontierExplorerCore::try_send_next_goal()
   all_frontiers_suppressed_reported = false;
   suppressed_return_to_start_started = false;
   if (filtered_frontiers.empty()) {
+    if (start_final_sweep()) {
+      // Same pose, relaxed decision map: search again before calling the map finished.
+      try_send_next_goal();
+      return;
+    }
     no_reachable_frontier_reported = false;
     publish_frontier_markers(filtered_frontiers);
 
@@ -186,6 +196,12 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
 {
   clear_post_goal_wait_state();
   clear_active_goal_progress_state();
+  if (arrival_spin_in_progress && callbacks.cancel_arrival_spin) {
+    callbacks.cancel_arrival_spin();
+  }
+  arrival_spin_in_progress = false;
+  // A late result from the cancelled spin must not resume scheduling.
+  ++arrival_spin_id;
 
   no_frontiers_reported = false;
   no_reachable_frontier_reported = false;
@@ -229,6 +245,8 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
     decision_map_cache_misses = 0;
     sparse_coverage_checked_points.clear();
     sparse_coverage_remarked_cells = 0;
+    arrival_spin_points.clear();
+    final_sweep_active = false;
     frontier_snapshot_cache_hits = 0;
     frontier_snapshot_cache_misses = 0;
     mrtsp_order_cache_hits = 0;
@@ -496,6 +514,16 @@ if (!active_goal_cost_status.has_value()) {
   }
 
   if (
+    !active_goal_cost_status.has_value() &&
+    active_goal_distance <= params.frontier_candidate_min_goal_distance_m)
+  {
+    // On the final approach the snapshot drops every frontier this close to the robot, and the
+    // target is mostly revealed, so both checks below would cancel a goal about to be reached.
+    reset_replacement_candidate_tracking();
+    return;
+  }
+
+  if (
     !revealed_completion_distance_reached &&
     !active_goal_sent_time_ns.has_value() &&
     !active_goal_cost_status.has_value())
@@ -625,10 +653,11 @@ if (!active_goal_cost_status.has_value()) {
     !revealed_completion_distance_reached &&
     !active_goal_cost_status.has_value() &&
     params.goal_preemption_enabled &&
-    frontier_exists_in_set(active_goal_frontier, filtered_frontiers))
+    frontier_tracked_in_set(active_goal_frontier, filtered_frontiers))
   {
     // Snapshot membership remains the final authority for revealed-preemption.
-    // If the frontier still exists in the refreshed set, keep the active goal.
+    // If the frontier still exists in the refreshed set, keep the active goal. Tracked loosely:
+    // a frontier shrinks and shifts as it is revealed, and is still worth finishing.
     reset_replacement_candidate_tracking();
     publish_frontier_markers(filtered_frontiers);
     return;
@@ -731,7 +760,8 @@ void FrontierExplorerCore::issue_active_goal_cancel()
   pending_cancel_reason.reset();
   cancel_request_in_progress = true;
   set_goal_state(GoalLifecycleState::CANCELING);
-  callbacks.log_debug(reason);
+  // Info, not debug: why a goal was dropped is the first question after a patchy run.
+  callbacks.log_info("Canceling active goal: " + reason);
 
   const int dispatch_id = current_dispatch_id;
   // Bind cancel response to current dispatch to ignore late/stale acknowledgements.
@@ -1187,6 +1217,13 @@ void FrontierExplorerCore::get_result_callback(
     return;
   }
 
+  const bool arrived =
+    status == action_msgs::msg::GoalStatus::STATUS_SUCCEEDED ||
+    (status == action_msgs::msg::GoalStatus::STATUS_CANCELED && distance_completed_frontier.has_value());
+  if (arrived && maybe_start_arrival_spin()) {
+    return;
+  }
+
   if (params.post_goal_settle_enabled) {
     start_post_goal_settle();
     return;
@@ -1194,6 +1231,83 @@ void FrontierExplorerCore::get_result_callback(
 
   clear_post_goal_wait_state();
   try_send_next_goal();
+}
+
+bool FrontierExplorerCore::maybe_start_arrival_spin()
+{
+  if (!params.arrival_spin_enabled || params.arrival_spin_angle_deg <= 0.0 || !callbacks.request_arrival_spin) {
+    return false;
+  }
+
+  const auto current_pose = callbacks.get_current_pose();
+  if (!current_pose.has_value()) {
+    return false;
+  }
+  const double x = current_pose->position.x;
+  const double y = current_pose->position.y;
+  for (const auto & point : arrival_spin_points) {
+    if (std::hypot(point.first - x, point.second - y) < params.arrival_spin_min_spacing_m) {
+      // Already looked round from here; another spin adds time, not map.
+      return false;
+    }
+  }
+
+  const int spin_id = ++arrival_spin_id;
+  arrival_spin_in_progress = true;
+  const bool started = callbacks.request_arrival_spin(
+    params.arrival_spin_angle_deg * M_PI / 180.0,
+    [this, spin_id](bool succeeded) {arrival_spin_finished(spin_id, succeeded);});
+  if (!started) {
+    arrival_spin_in_progress = false;
+    callbacks.log_warn("Arrival spin could not be started; continuing without it");
+    return false;
+  }
+
+  arrival_spin_points.emplace_back(x, y);
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2)
+      << "Frontier reached; turning " << params.arrival_spin_angle_deg
+      << " deg at (" << x << ", " << y << ") so SLAM maps the area around it";
+  callbacks.log_info(oss.str());
+  return true;
+}
+
+void FrontierExplorerCore::arrival_spin_finished(int spin_id, bool succeeded)
+{
+  if (spin_id != arrival_spin_id || !arrival_spin_in_progress) {
+    // Superseded by a stop or a newer spin.
+    return;
+  }
+
+  arrival_spin_in_progress = false;
+  if (!succeeded) {
+    callbacks.log_info("Arrival spin ended early; continuing exploration");
+  }
+  if (!exploration_enabled) {
+    return;
+  }
+
+  if (params.post_goal_settle_enabled) {
+    // Let the map catch up with the scans taken during the turn.
+    start_post_goal_settle();
+    return;
+  }
+  try_send_next_goal();
+}
+
+bool FrontierExplorerCore::start_final_sweep()
+{
+  if (!params.final_sweep_enabled || !params.sparse_coverage_enabled || final_sweep_active) {
+    return false;
+  }
+
+  final_sweep_active = true;
+  decision_map_dirty = true;
+  frontier_snapshot.reset();
+  callbacks.log_info(
+    "No frontiers left in open space; starting the final coverage sweep "
+    "(gaps against walls and furniture now count as unexplored)");
+  return true;
 }
 
 void FrontierExplorerCore::feedback_callback(double distance_remaining, int dispatch_id)

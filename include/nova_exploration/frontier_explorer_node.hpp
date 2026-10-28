@@ -26,6 +26,7 @@ limitations under the License.
 #include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <nav2_msgs/action/navigate_to_pose.hpp>
+#include <nav2_msgs/action/spin.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -56,12 +57,16 @@ public:
 private:
   using NavigateToPose = nav2_msgs::action::NavigateToPose;
   using NavigateGoalHandle = rclcpp_action::ClientGoalHandle<NavigateToPose>;
+  using Spin = nav2_msgs::action::Spin;
+  using SpinGoalHandle = rclcpp_action::ClientGoalHandle<Spin>;
 
   void occupancyGridCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void costmapCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void localCostmapCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void keepoutMaskCallback(const nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg);
   void publishCompletionEvent();
+  bool requestArrivalSpin(double angle_rad, std::function<void(bool)> on_done);
+  void cancelArrivalSpin();
 
   std::optional<geometry_msgs::msg::Pose> getCurrentPose();
   void publishFrontierMarkers(const FrontierSequence & frontiers);
@@ -139,6 +144,12 @@ private:
 
   // ROS interfaces.
   rclcpp_action::Client<NavigateToPose>::SharedPtr navigate_to_pose_client_;
+  rclcpp_action::Client<Spin>::SharedPtr spin_client_;
+  std::shared_ptr<SpinGoalHandle> spin_goal_handle_;
+  // Bumped per spin so callbacks of a cancelled spin cannot touch the next one.
+  int spin_request_id_{0};
+  std::string arrival_spin_action_name_{"spin"};
+  double arrival_spin_time_allowance_s_{20.0};
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Service<srv::ControlExploration>::SharedPtr control_service_;

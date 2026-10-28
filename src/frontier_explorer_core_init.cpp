@@ -93,6 +93,12 @@ FrontierExplorerCore::FrontierExplorerCore(
   params.goal_preemption_lidar_min_reveal_length_m = std::max(
     0.0,
     params.goal_preemption_lidar_min_reveal_length_m);
+  params.goal_preemption_track_radius_m = std::max(0.0, params.goal_preemption_track_radius_m);
+  params.arrival_spin_angle_deg = std::clamp(params.arrival_spin_angle_deg, 0.0, 720.0);
+  params.arrival_spin_min_spacing_m = std::max(0.0, params.arrival_spin_min_spacing_m);
+  params.final_sweep_max_hole_occupied_border_ratio = std::clamp(
+    params.final_sweep_max_hole_occupied_border_ratio, 0.0, 1.0);
+  params.final_sweep_max_hole_cells = std::max(0, params.final_sweep_max_hole_cells);
 
   // Defensive defaults keep unit tests and partial hosts from crashing.
   if (!callbacks.now_ns) {
@@ -212,6 +218,12 @@ SparseCoverageConfig FrontierExplorerCore::sparse_coverage_config() const
   config.min_unknown_ratio = params.sparse_coverage_min_unknown_ratio;
   config.max_hole_cells = params.sparse_coverage_max_hole_cells;
   config.max_hole_occupied_border_ratio = params.sparse_coverage_max_hole_occupied_border_ratio;
+  if (final_sweep_active) {
+    // Final sweep: gaps against walls and furniture count too, now that open space is done.
+    config.max_hole_cells = std::max(config.max_hole_cells, params.final_sweep_max_hole_cells);
+    config.max_hole_occupied_border_ratio = std::max(
+      config.max_hole_occupied_border_ratio, params.final_sweep_max_hole_occupied_border_ratio);
+  }
   config.checked_radius_m = params.sparse_coverage_checked_radius_m;
   return config;
 }

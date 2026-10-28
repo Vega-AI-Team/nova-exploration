@@ -130,6 +130,7 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   this->declare_parameter<double>("frontier_selection_min_distance", 0.5);
   this->declare_parameter<bool>("escape_enabled", false);
   this->declare_parameter<double>("frontier_visit_tolerance", 0.30);
+  this->declare_parameter<double>("goal_preemption_track_radius_m", 0.0);
   this->declare_parameter<bool>("goal_preemption_enabled", false);
   this->declare_parameter<bool>("goal_skip_on_blocked_goal", false);
   this->declare_parameter<double>("goal_preemption_min_interval_s", 2.0);
@@ -141,6 +142,14 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   this->declare_parameter<double>("goal_preemption_lidar_yaw_offset_deg", 0.0);
   this->declare_parameter<bool>("post_goal_settle_enabled", true);
   this->declare_parameter<double>("post_goal_min_settle", 0.80);
+  this->declare_parameter<bool>("arrival_spin_enabled", false);
+  this->declare_parameter<double>("arrival_spin_angle_deg", 360.0);
+  this->declare_parameter<double>("arrival_spin_min_spacing_m", 1.5);
+  this->declare_parameter<std::string>("arrival_spin_action_name", "spin");
+  this->declare_parameter<double>("arrival_spin_time_allowance_s", 20.0);
+  this->declare_parameter<bool>("final_sweep_enabled", false);
+  this->declare_parameter<double>("final_sweep_max_hole_occupied_border_ratio", 0.5);
+  this->declare_parameter<int>("final_sweep_max_hole_cells", 400);
   this->declare_parameter<double>("map_processing_rate_hz", 1.0);
   this->declare_parameter<bool>("return_to_start_on_complete", true);
   this->declare_parameter<std::string>("all_frontiers_suppressed_behavior", "stay");
@@ -222,6 +231,8 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
     "frontier_selection_min_distance").as_double();
   params_.escape_enabled = this->get_parameter("escape_enabled").as_bool();
   params_.frontier_visit_tolerance = this->get_parameter("frontier_visit_tolerance").as_double();
+  params_.goal_preemption_track_radius_m = this->get_parameter(
+    "goal_preemption_track_radius_m").as_double();
   params_.goal_preemption_enabled = this->get_parameter(
     "goal_preemption_enabled").as_bool();
   params_.goal_skip_on_blocked_goal = this->get_parameter("goal_skip_on_blocked_goal").as_bool();
@@ -240,6 +251,17 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
     "goal_preemption_lidar_yaw_offset_deg").as_double();
   params_.post_goal_settle_enabled = this->get_parameter("post_goal_settle_enabled").as_bool();
   params_.post_goal_min_settle = this->get_parameter("post_goal_min_settle").as_double();
+  params_.arrival_spin_enabled = this->get_parameter("arrival_spin_enabled").as_bool();
+  params_.arrival_spin_angle_deg = this->get_parameter("arrival_spin_angle_deg").as_double();
+  params_.arrival_spin_min_spacing_m = this->get_parameter("arrival_spin_min_spacing_m").as_double();
+  arrival_spin_action_name_ = this->get_parameter("arrival_spin_action_name").as_string();
+  arrival_spin_time_allowance_s_ = std::max(
+    1.0, this->get_parameter("arrival_spin_time_allowance_s").as_double());
+  params_.final_sweep_enabled = this->get_parameter("final_sweep_enabled").as_bool();
+  params_.final_sweep_max_hole_occupied_border_ratio = this->get_parameter(
+    "final_sweep_max_hole_occupied_border_ratio").as_double();
+  params_.final_sweep_max_hole_cells = static_cast<int>(
+    this->get_parameter("final_sweep_max_hole_cells").as_int());
   params_.map_processing_rate_hz = this->get_parameter("map_processing_rate_hz").as_double();
   params_.return_to_start_on_complete = this->get_parameter("return_to_start_on_complete").as_bool();
   params_.all_frontiers_suppressed_behavior = this->get_parameter(
@@ -299,6 +321,9 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   navigate_to_pose_client_ = rclcpp_action::create_client<NavigateToPose>(
     this,
     params_.navigate_to_pose_action_name);
+  if (params_.arrival_spin_enabled) {
+    spin_client_ = rclcpp_action::create_client<Spin>(this, arrival_spin_action_name_);
+  }
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
   if (completion_event_config_.enabled) {
@@ -368,6 +393,12 @@ FrontierExplorerNode::FrontierExplorerNode(const rclcpp::NodeOptions & options)
   callbacks.on_exploration_complete = [this]() {
       this->publishCompletionEvent();
     };
+  if (spin_client_) {
+    callbacks.request_arrival_spin = [this](double angle_rad, std::function<void(bool)> on_done) {
+        return this->requestArrivalSpin(angle_rad, std::move(on_done));
+      };
+    callbacks.cancel_arrival_spin = [this]() {this->cancelArrivalSpin();};
+  }
   callbacks.debug_outputs_enabled = [this]() {
       return this->debugOutputsEnabled();
     };
@@ -1521,6 +1552,68 @@ void FrontierExplorerNode::dispatchGoalRequest(const GoalDispatchRequest & reque
       false,
       std::string("Failed to send frontier goal: ") + exc.what());
   }
+}
+
+bool FrontierExplorerNode::requestArrivalSpin(double angle_rad, std::function<void(bool)> on_done)
+{
+  if (!spin_client_ || !spin_client_->action_server_is_ready()) {
+    return false;
+  }
+
+  Spin::Goal goal;
+  goal.target_yaw = static_cast<float>(angle_rad);
+  goal.time_allowance = rclcpp::Duration::from_seconds(arrival_spin_time_allowance_s_);
+
+  const int request_id = ++spin_request_id_;
+  // Shared so that exactly one of the response/result callbacks reports back.
+  auto done = std::make_shared<std::function<void(bool)>>(std::move(on_done));
+  auto finish = [done](bool succeeded) {
+      if (*done) {
+        auto callback = std::move(*done);
+        *done = nullptr;
+        callback(succeeded);
+      }
+    };
+
+  rclcpp_action::Client<Spin>::SendGoalOptions options;
+  options.goal_response_callback = [this, request_id, finish](std::shared_ptr<SpinGoalHandle> handle) {
+      if (!handle) {
+        RCLCPP_WARN(this->get_logger(), "Arrival spin was rejected by the spin server");
+        finish(false);
+        return;
+      }
+      if (request_id == spin_request_id_) {
+        spin_goal_handle_ = handle;
+      }
+    };
+  options.result_callback = [this, request_id, finish](const SpinGoalHandle::WrappedResult & result) {
+      if (request_id == spin_request_id_) {
+        spin_goal_handle_.reset();
+      }
+      finish(result.code == rclcpp_action::ResultCode::SUCCEEDED);
+    };
+
+  try {
+    spin_client_->async_send_goal(goal, options);
+  } catch (const std::exception & exc) {
+    RCLCPP_WARN(this->get_logger(), "Failed to send arrival spin: %s", exc.what());
+    return false;
+  }
+  return true;
+}
+
+void FrontierExplorerNode::cancelArrivalSpin()
+{
+  ++spin_request_id_;
+  if (!spin_client_ || !spin_goal_handle_) {
+    return;
+  }
+  try {
+    spin_client_->async_cancel_goal(spin_goal_handle_);
+  } catch (const std::exception & exc) {
+    RCLCPP_WARN(this->get_logger(), "Failed to cancel arrival spin: %s", exc.what());
+  }
+  spin_goal_handle_.reset();
 }
 
 int FrontierExplorerNode::mapResultCodeToGoalStatus(rclcpp_action::ResultCode code)

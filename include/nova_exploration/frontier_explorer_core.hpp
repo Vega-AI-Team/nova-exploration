@@ -102,6 +102,10 @@ struct FrontierExplorerCoreParams
   double frontier_selection_min_distance{0.5};
   bool escape_enabled{false};
   double frontier_visit_tolerance{0.30};
+  // How far the active frontier may drift between snapshots and still count as the same target
+  // for preemption. Revealing a frontier shrinks and shifts it; at frontier_visit_tolerance the
+  // goal was dropped half-way there. Values below frontier_visit_tolerance fall back to it.
+  double goal_preemption_track_radius_m{0.0};
   bool goal_preemption_enabled{false};
   bool goal_skip_on_blocked_goal{false};
   double goal_preemption_min_interval_s{2.0};
@@ -120,6 +124,15 @@ struct FrontierExplorerCoreParams
   double goal_preemption_lidar_yaw_offset_deg{0.0};
   bool post_goal_settle_enabled{true};
   double post_goal_min_settle{0.80};
+  // Turn in place on reaching a frontier so SLAM sees the arrival point from every side.
+  bool arrival_spin_enabled{false};
+  double arrival_spin_angle_deg{360.0};
+  // No second spin within this distance of an earlier one.
+  double arrival_spin_min_spacing_m{1.5};
+  // Once no frontier is left, search once more with wall-adjacent sparse holes allowed.
+  bool final_sweep_enabled{false};
+  double final_sweep_max_hole_occupied_border_ratio{0.5};
+  int final_sweep_max_hole_cells{400};
   double map_processing_rate_hz{1.0};
   bool return_to_start_on_complete{true};
   std::string all_frontiers_suppressed_behavior{"stay"};
@@ -149,6 +162,10 @@ struct FrontierExplorerCoreCallbacks
   std::function<void(const nav_msgs::msg::OccupancyGrid &)> publish_optimized_map;
   // Completion hook lets the ROS-facing node trigger optional post-completion side effects.
   std::function<void()> on_exploration_complete;
+  // Starts an in-place turn of angle_rad; on_done(succeeded) is called later, never from inside
+  // the call. Returns false when the turn could not be started. Optional.
+  std::function<bool(double angle_rad, std::function<void(bool)> on_done)> request_arrival_spin;
+  std::function<void()> cancel_arrival_spin;
   std::function<bool()> debug_outputs_enabled;
   std::function<void(const std::string &)> log_debug;
   std::function<void(const std::string &)> log_info;
@@ -229,6 +246,11 @@ public:
     const std::optional<FrontierLike> & frontier,
     const FrontierSequence & frontiers) const;
 
+  // Looser membership for the active goal: any candidate within goal_preemption_track_radius_m.
+  bool frontier_tracked_in_set(
+    const std::optional<FrontierLike> & frontier,
+    const FrontierSequence & frontiers) const;
+
   std::optional<std::string> frontier_cost_status(
     const std::optional<FrontierLike> & frontier) const;
 
@@ -291,6 +313,11 @@ public:
   [[nodiscard]] bool ready_for_shutdown() const;
 
   void handle_exploration_complete(const geometry_msgs::msg::Pose & current_pose);
+  // Starts the arrival spin if enabled and not too close to an earlier one; true if started.
+  bool maybe_start_arrival_spin();
+  void arrival_spin_finished(int spin_id, bool succeeded);
+  // Switches to the relaxed final-sweep coverage config once; true if it just did.
+  bool start_final_sweep();
   void handle_all_frontiers_suppressed(const geometry_msgs::msg::Pose & current_pose);
   void consider_cancel_suppressed_return_to_start();
 
@@ -450,6 +477,12 @@ public:
   bool decision_map_dirty{false};
   bool pending_costmap_search_input_update{false};
   bool pending_local_costmap_search_input_update{false}; 
+
+  // Arrival spin and final coverage sweep.
+  bool arrival_spin_in_progress{false};
+  int arrival_spin_id{0};
+  std::vector<std::pair<double, double>> arrival_spin_points;
+  bool final_sweep_active{false};
 
   // Escape and return-to-start behavior flags.
   bool return_to_start_started{false};

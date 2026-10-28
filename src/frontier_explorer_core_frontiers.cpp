@@ -19,6 +19,7 @@ limitations under the License.
 #include "frontier_explorer_core_detail.hpp"
 #include "nova_exploration/mrtsp_solver.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
@@ -433,6 +434,32 @@ bool FrontierExplorerCore::are_frontiers_equivalent(
     first_frontier,
     second_frontier,
     params.frontier_visit_tolerance);
+}
+
+bool FrontierExplorerCore::frontier_tracked_in_set(
+  const std::optional<FrontierLike> & frontier,
+  const FrontierSequence & frontiers) const
+{
+  if (!frontier.has_value()) {
+    return false;
+  }
+
+  const double radius = std::max(params.goal_preemption_track_radius_m, params.frontier_visit_tolerance);
+  const std::pair<double, double> points[] = {
+    frontier_reference_point(*frontier), frontier_position(*frontier)};
+  for (const auto & candidate : frontiers) {
+    const std::pair<double, double> candidate_points[] = {
+      frontier_reference_point(candidate), frontier_position(candidate)};
+    // Either point may have moved as the frontier was partly revealed; any close pair is a match.
+    for (const auto & point : points) {
+      for (const auto & candidate_point : candidate_points) {
+        if (std::hypot(point.first - candidate_point.first, point.second - candidate_point.second) < radius) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 bool FrontierExplorerCore::frontier_exists_in_set(
