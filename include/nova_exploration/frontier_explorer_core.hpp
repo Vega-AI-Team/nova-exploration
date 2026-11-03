@@ -518,7 +518,18 @@ public:
   // it is selected ahead of the MRTSP order. Cleared once that goal finishes or
   // the frontier is gone, after which automatic ordering resumes.
   std::optional<std::pair<double, double>> priority_point;
+  // A point the operator picked that is NOT on any frontier -- "go here", not
+  // "explore that opening next". It is held until the robot arrives (or the
+  // goal fails), outranking frontier selection entirely, and it survives the
+  // map updates and reselection that preempt an ordinary frontier goal,
+  // because the operator asked for this exact spot.
+  std::optional<std::pair<double, double>> custom_goal_point;
   void set_priority_point(const std::optional<std::pair<double, double>> & point);
+  // Dispatches custom_goal_point. Returns false when it could not be sent.
+  bool send_custom_goal(const geometry_msgs::msg::Pose & current_pose);
+  // Whether priority_point snaps to a frontier right now -- i.e. whether it is
+  // an "explore that opening" request rather than a plain "go here".
+  [[nodiscard]] bool priority_point_matches_a_frontier();
   [[nodiscard]] std::optional<FrontierLike> match_priority_frontier(
     const FrontierSequence & frontiers) const;
   [[nodiscard]] bool frontier_near_priority(const FrontierLike & frontier) const;

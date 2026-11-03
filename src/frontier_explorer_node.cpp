@@ -1398,6 +1398,11 @@ void FrontierExplorerNode::publishFrontierInfo()
   } else {
     json << "null";
   }
+  // True when the point is not on any frontier and the robot is driving
+  // straight to it -- a "go here", which the UI labels differently from
+  // "explore that opening next".
+  json << ",\"priority_custom\":"
+       << ((running && core_->custom_goal_point.has_value()) ? "true" : "false");
   json << ",\"match_radius_m\":" << params_.priority_match_radius_m << "}";
 
   std_msgs::msg::String msg;

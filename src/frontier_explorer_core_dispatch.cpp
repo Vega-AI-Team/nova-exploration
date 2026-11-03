@@ -70,6 +70,19 @@ void FrontierExplorerCore::try_send_next_goal()
 
   record_start_pose(*current_pose);
 
+  if (custom_goal_point.has_value()) {
+    // An operator point off the frontier graph: drive to it and nothing else
+    // until it is reached, failed or cleared.
+    if (send_custom_goal(*current_pose)) {
+      return;
+    }
+    // Dispatch refused (no action server yet) -- drop it rather than wedge
+    // exploration on a goal that cannot be sent.
+    custom_goal_point.reset();
+    priority_point.reset();
+    callbacks.log_warn("Could not dispatch the custom goal; resuming automatic ordering");
+  }
+
   if (!pending_frontier_sequence.empty()) {
     // Replacement/preemption path already computed a concrete next target.
     dispatch_pending_frontier_goal(current_pose);
@@ -156,7 +169,9 @@ void FrontierExplorerCore::try_send_next_goal()
   }
 
   no_frontiers_reported = false;
-  if (priority_point.has_value() && !match_priority_frontier(filtered_frontiers).has_value()) {
+  if (priority_point.has_value() && !custom_goal_point.has_value() &&
+    !match_priority_frontier(filtered_frontiers).has_value())
+  {
     // The prioritized frontier was explored away or suppressed.
     priority_point.reset();
     callbacks.log_info("Priority frontier is gone; resuming automatic ordering");
@@ -215,6 +230,7 @@ void FrontierExplorerCore::reset_exploration_runtime_state(bool clear_maps)
   pending_frontier_selection_mode.clear();
   pending_frontier_dispatch_context.clear();
   priority_point.reset();
+  custom_goal_point.reset();
   active_goal_blocked_reason.reset();
   pending_costmap_search_input_update = false;
   pending_local_costmap_search_input_update = false;
@@ -1184,6 +1200,19 @@ void FrontierExplorerCore::get_result_callback(
     return;
   }
 
+  if (goal_kind == "custom_goal") {
+    // Reached, failed or aborted -- either way the operator's point is done
+    // with, so automatic ordering takes over again. Retrying a point nav2
+    // could not reach would just loop.
+    custom_goal_point.reset();
+    priority_point.reset();
+    if (status == action_msgs::msg::GoalStatus::STATUS_SUCCEEDED) {
+      callbacks.log_info("Reached the custom goal; resuming automatic ordering");
+    } else if (status != action_msgs::msg::GoalStatus::STATUS_CANCELED) {
+      callbacks.log_warn("Custom goal did not complete; resuming automatic ordering");
+    }
+  }
+
   if (
     goal_kind == "frontier" && priority_point.has_value() &&
     status != action_msgs::msg::GoalStatus::STATUS_CANCELED &&
@@ -1352,7 +1381,14 @@ void FrontierExplorerCore::set_priority_point(
 {
   priority_point = point;
   if (!point.has_value()) {
+    const bool had_custom = custom_goal_point.has_value();
+    custom_goal_point.reset();
     callbacks.log_info("Priority frontier cleared; resuming automatic ordering");
+    if (had_custom && goal_in_progress && active_goal_kind == "custom_goal") {
+      // Stop driving to a point nobody wants any more; the result callback
+      // then schedules normal exploration again.
+      request_active_goal_cancel("custom goal cleared by the operator");
+    }
     return;
   }
 
@@ -1361,12 +1397,19 @@ void FrontierExplorerCore::set_priority_point(
       << "Priority frontier requested at (" << point->first << ", " << point->second << ")";
   callbacks.log_info(oss.str());
 
+  custom_goal_point.reset();
+
   if (!exploration_enabled || !map.has_value() || !costmap.has_value()) {
     // Kept until the next dispatch picks it up.
     return;
   }
 
   if (!goal_in_progress) {
+    // try_send_next_goal() snaps to a frontier if there is one near the point,
+    // and promotes it to a custom goal if there is not.
+    if (!priority_point_matches_a_frontier()) {
+      custom_goal_point = priority_point;
+    }
     try_send_next_goal();
     return;
   }
@@ -1392,10 +1435,17 @@ void FrontierExplorerCore::set_priority_point(
   const FrontierSequence filtered_frontiers = filter_frontiers_for_suppression(snapshot.frontiers);
   const auto priority_frontier = match_priority_frontier(filtered_frontiers);
   if (!priority_frontier.has_value()) {
-    priority_point.reset();
-    callbacks.log_warn(
+    // No opening near the point: treat it as "just go here". Preempt the
+    // frontier goal in flight and drive straight to it.
+    custom_goal_point = priority_point;
+    callbacks.log_info(
       "No frontier within " + detail::format_meters(params.priority_match_radius_m) +
-      " of the requested point; keeping automatic ordering");
+      " of the requested point; driving to it as a custom goal");
+    if (!send_custom_goal(*current_pose)) {
+      custom_goal_point.reset();
+      priority_point.reset();
+      callbacks.log_warn("Could not dispatch the custom goal; keeping automatic ordering");
+    }
     return;
   }
 
@@ -1410,6 +1460,52 @@ void FrontierExplorerCore::set_priority_point(
   pending_frontier_dispatch_context = "reselected";
   callbacks.log_info("Preempting active frontier goal for the operator priority frontier");
   dispatch_pending_frontier_goal(*current_pose);
+}
+
+bool FrontierExplorerCore::priority_point_matches_a_frontier()
+{
+  if (!priority_point.has_value() || !map.has_value() || !costmap.has_value()) {
+    return false;
+  }
+  const auto current_pose = callbacks.get_current_pose();
+  if (!current_pose.has_value()) {
+    return false;
+  }
+  try {
+    const auto snapshot = get_frontier_snapshot(
+      *current_pose, params.frontier_candidate_min_goal_distance_m);
+    return match_priority_frontier(
+      filter_frontiers_for_suppression(snapshot.frontiers)).has_value();
+  } catch (const std::out_of_range & exc) {
+    callbacks.log_warn(std::string("Skipping priority frontier lookup: ") + exc.what());
+    return false;
+  }
+}
+
+bool FrontierExplorerCore::send_custom_goal(const geometry_msgs::msg::Pose & current_pose)
+{
+  if (!custom_goal_point.has_value()) {
+    return false;
+  }
+
+  geometry_msgs::msg::PoseStamped goal_pose;
+  goal_pose.header.frame_id = params.global_frame;
+  goal_pose.pose.position.x = custom_goal_point->first;
+  goal_pose.pose.position.y = custom_goal_point->second;
+  // Face the way we travelled, as frontier goals do; a point click carries no
+  // heading of its own, and arriving backwards looks like a fault.
+  goal_pose.pose.orientation = current_pose.orientation;
+  const double dx = custom_goal_point->first - current_pose.position.x;
+  const double dy = custom_goal_point->second - current_pose.position.y;
+  if (std::hypot(dx, dy) > 0.05) {
+    goal_pose.pose.orientation = detail::quaternion_from_yaw(std::atan2(dy, dx));
+  }
+
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2)
+      << "Sending custom goal (" << custom_goal_point->first << ", "
+      << custom_goal_point->second << ")";
+  return send_pose_goal(goal_pose, "custom_goal", std::nullopt, {}, oss.str());
 }
 
 }  // namespace nova_exploration
